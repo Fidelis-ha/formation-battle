@@ -1,0 +1,104 @@
+OpenCode via RouterLab
+Model: kimi-k3
+Endpoint: http://127.0.0.1:37855 -> https://api.routerlab.ch/v1
+
+[0m
+> build · kimi-k3
+[0m
+[0m→ [0mRead docs/SPEC-symbole.md
+[0m→ [0mRead .reviews/symbole-shot-descriptions.md
+[0m
+[0m$ [0mls -la .reviews/ .reviews/shots/ docs/ 2>/dev/null
+.reviews/:
+total 232
+drwxr-xr-x 3 hermes hermes  4096 Oct 13 13:58 .
+drwxr-xr-x 5 hermes hermes  4096 Oct 13 09:08 ..
+-rw-r--r-- 1 hermes hermes 14814 Oct 13 08:28 design-rereview-kimi.md
+-rw-r--r-- 1 hermes hermes  3799 Sep 29 16:29 design-review-kimi.log
+-rw-r--r-- 1 hermes hermes 13570 Sep 29 16:29 design-review-kimi.md
+-rw-r--r-- 1 hermes hermes 56602 Sep 29 17:37 fix-run-1.log
+-rw-r--r-- 1 hermes hermes  6614 Oct 13 09:37 func-rereview.md
+-rw-r--r-- 1 hermes hermes  2223 Sep 29 16:46 func-ux-code-review.log
+-rw-r--r-- 1 hermes hermes 16017 Sep 29 16:44 func-ux-code-review.md
+-rw-r--r-- 1 hermes hermes  5652 Oct 13 12:39 mobile-rereview.log
+-rw-r--r-- 1 hermes hermes  6657 Oct 13 12:38 mobile-rereview.md
+-rw-r--r-- 1 hermes hermes 25963 Oct 13 10:22 mobile-run-1.log
+-rw-r--r-- 1 hermes hermes  5596 Oct 13 08:33 security-rereview-glm.md
+-rw-r--r-- 1 hermes hermes  3346 Sep 29 16:35 security-review-glm.log
+-rw-r--r-- 1 hermes hermes 11198 Sep 29 16:34 security-review-glm.md
+-rw-r--r-- 1 hermes hermes  2825 Sep 29 16:23 shot-descriptions.md
+drwxr-xr-x 2 hermes hermes  4096 Oct 13 13:52 shots
+-rw-r--r-- 1 hermes hermes   225 Oct 13 13:58 symbole-design-review.log
+-rw-r--r-- 1 hermes hermes 10866 Oct 13 13:47 symbole-run-1.log
+-rw-r--r-- 1 hermes hermes  2040 Oct 13 13:58 symbole-shot-descriptions.md
+
+.reviews/shots/:
+total 1900
+drwxr-xr-x 2 hermes hermes   4096 Oct 13 13:52 .
+drwxr-xr-x 3 hermes hermes   4096 Oct 13 13:58 ..
+-rw-r--r-- 1 hermes hermes 143339 Sep 29 16:20 1-start.png
+-rw-r--r-- 1 hermes hermes 117393 Oct 13 13:52 10-detail-kavallerie.png
+-rw-r--r-- 1 hermes hermes 102184 Oct 13 13:52 11-detail-speere.png
+-rw-r--r-- 1 hermes hermes 138743 Sep 29 16:20 2-gefecht.png
+-rw-r--r-- 1 hermes hermes 134667 Sep 29 16:20 3-spaet.png
+-rw-r--r-- 1 hermes hermes 102830 Sep 29 16:20 4-ende.png
+-rw-r--r-- 1 hermes hermes 134646 Oct 13 08:04 5-gefecht-gefixt.png
+-rw-r--r-- 1 hermes hermes 130798 Oct 13 09:45 6-final.png
+-rw-r--r-- 1 hermes hermes 127181 Oct 13 13:49 7-sidebar-icons.png
+-rw-r--r-- 1 hermes hermes 130356 Oct 13 13:49 8-feld-symbole.png
+-rw-r--r-- 1 hermes hermes 145996 Oct 13 13:49 9-uebersicht.png
+-rw-r--r-- 1 hermes hermes 119466 Oct 13 08:24 rereview-1-start.png
+-rw-r--r-- 1 hermes hermes 125001 Oct 13 08:24 rereview-2-hpbalken-zoom072.png
+-rw-r--r-- 1 hermes hermes 155615 Oct 13 08:24 rereview-3-gefecht-zoom072.png
+-rw-r--r-- 1 hermes hermes 108452 Oct 13 08:24 rereview-4-fluchtfahne.png
+
+docs/:
+total 24
+drwxr-xr-x 2 hermes hermes 4096 Oct 13 13:41 .
+drwxr-xr-x 5 hermes hermes 4096 Oct 13 09:08 ..
+-rw-r--r-- 1 hermes hermes 4795 Sep 29 15:22 SPEC-formation-battle.md
+-rw-r--r-- 1 hermes hermes 2404 Oct 13 10:03 SPEC-mobile.md
+-rw-r--r-- 1 hermes hermes 2065 Oct 13 13:41 SPEC-symbole.md
+[0m
+[0m✱ [0mGrep "ICONS|drawSoldier"[90m in index.html · 38 matches[0m
+[0m
+[0m$ [0mwc -l index.html
+1550 index.html
+[0m
+[0m→ [0mRead index.html[90m [offset=240, limit=70][0m
+[0m→ [0mRead index.html[90m [offset=880, limit=130][0m
+[0m→ [0mRead index.html[90m [limit=100, offset=140][0m
+[0m✱ [0mGrep "\.icon|zoom|setTransform|scale\("[90m in index.html · 59 matches[0m
+[0m→ [0mRead index.html[90m [limit=75, offset=40][0m
+[0m→ [0mRead index.html[90m [limit=60, offset=1010][0m
+[0m→ [0mRead index.html[90m [limit=30, offset=1385][0m
+[0m✱ [0mGrep "TEAM_COLOR|TEAM_DARK|spacing|SPACING"[90m in index.html · 21 matches[0m
+[0m✱ [0mGrep "SLOT|slot|slotPos|formation"[90m in index.html · 100 matches[0m
+[0m→ [0mRead index.html[90m [limit=40, offset=310][0m
+[0m✱ [0mGrep "radius"[90m in index.html · 36 matches[0m
+[0m→ [0mRead index.html[90m [limit=25, offset=1224][0m
+[0m✱ [0mGrep "terrain|fillStyle = "#[0-9a-f]{6}""[90m in index.html · 23 matches[0m
+[0m
+[0m← [0mWrite .reviews/symbole-design-review.md
+Wrote file successfully.
+[0m
+Alle Quellen gelesen. Entscheidende Fakten für die Bewertung habe ich verifiziert: `radius` ist rein visuell (Kampf/Separation laufen über `REACH`-Konstanten, Z. 185/1237), die Formations-Abstände sind 24/27 Welt-px (Z. 323–324), Zoom-Clamp 0.35–2.2 (Z. 692), Banner erst ab zoom > 0.5 (Z. 1025), Terrain-Farben `#4d6b3a`/`#33512a` (Z. 838/868) vs. Waffen-Farbe `#1c2016`. Damit kann ich die Screen-Pixel-Rechnung für Zoom 0.7–1.3 fundiert durchführen und das Review schreiben.
+Review geschrieben nach `.reviews/symbole-design-review.md`. Kern-Ergebnis:
+
+**Antwort auf die Leitfrage: Feld = Nein, Sidebar = Fast.**
+
+**Feld (KRITISCH):**
+- **F1 infantry ↔ swordsman** sind bei Zoom 0.7–1.3 dieselbe Gestalt: Der Krümmungsunterschied der Swordsman-Klinge beträgt nur ~1.1 Welt-px → **<1 Screen-px bei z=0.7** (Z. 957–959 vs. 963–964).
+- **F2 Kontrast-Falle:** Der typ-diskriminierende Waffenteil ragt über den Körper hinaus — und liegt dort auf dunklem Gras (`#1c2016` auf `#33512a` ≈ 2.2:1) bei nur 1.7 Screen-px Strichbreite. Das erklärt exakt Kairos' „Kreis-mit-Strich-Impression" in Shot 8: *gerendert ≠ lesbar*.
+- Sicher unterscheidbar sind nur **archer** (einzige Kurve) und **cavalry** (1.67× Durchmesser, Ellipse); housecarl bedingt. Faktisch trägt heute das **Banner** die Typ-Identifikation — und das fällt unter zoom 0.5 weg.
+
+**Sidebar (KRITISCH):**
+- **S1 spearman ↔ infantry** nicht sicher trennbar — Kairos notiert das schon bei ~48 px (1.6×-Shot); real sind es 30 px (Desktop) / 24 px (Mobile), SPEC-Zielband 16–24 px ist ungetestet (S2).
+
+**Top-Maßnahmen (P1):**
+1. **Halo:** Waffenpfad zuerst hell (`rgba(232,228,216,0.8)`, lw 4.2), dann dunkel stroken → löst sich vom Terrain (~3 Zeilen).
+2. **LOD:** `lod = zoom < 0.55 ? 2 : (zoom < 0.85 ? 1 : 0)` — ab 0.85 nur Primärform mit lw 3.2, Sekundärstriche (Parier/Sehne/Knick) weg.
+3. **swordsman** als gefüllte, breit gebogene Klinge (Füllung-vs-Linie als harter Kanal).
+4. **Sidebar-spearman:** Speer über die volle Icon-Diagonale, kreuzt den Schild-Kreis; infantry-Parier breiter → Orientierungskontrast.
+
+P2 enthält u.a. zoom-kompensierte lineWidth (`max(2.4, 2.0/zoom)`) und **Radius-Differenzierung** (verifiziert risikofrei: `u.radius` ist rein visuell, Kampf/Separation laufen über `REACH`-Konstanten). Dazu Befunde nach Schweregrad, SPEC-Konformitätstabelle und Verifikationsplan in der Datei.
