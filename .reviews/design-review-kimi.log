@@ -1,0 +1,71 @@
+OpenCode via RouterLab
+Model: kimi-k3
+Endpoint: http://127.0.0.1:34757 -> https://api.routerlab.ch/v1
+
+[0m
+> build · kimi-k3
+[0m
+[0m→ [0mRead .
+[0m→ [0mRead docs/SPEC-formation-battle.md
+[0m→ [0mRead .reviews/shot-descriptions.md
+[0m
+[0m$ [0mwc -l /opt/data/projekte/formation-battle/index.html
+1191 /opt/data/projekte/formation-battle/index.html
+[0m
+[0m→ [0mRead index.html[90m [limit=450][0m
+[0m→ [0mRead index.html[90m [offset=451, limit=450][0m
+[0m→ [0mRead index.html[90m [offset=901][0m
+[0m
+[0m$ [0mls -la /opt/data/projekte/formation-battle/.reviews/ && ls -la /opt/data/projekte/formation-battle/.reviews/shots/ 2>/dev/null
+total 20
+drwxr-xr-x 3 hermes hermes 4096 Sep 29 16:24 .
+drwxr-xr-x 4 hermes hermes 4096 Sep 29 16:20 ..
+-rw-r--r-- 1 hermes hermes  530 Sep 29 16:25 design-review-kimi.log
+-rw-r--r-- 1 hermes hermes 2825 Sep 29 16:23 shot-descriptions.md
+drwxr-xr-x 2 hermes hermes 4096 Sep 29 16:20 shots
+total 520
+drwxr-xr-x 2 hermes hermes   4096 Sep 29 16:20 .
+drwxr-xr-x 3 hermes hermes   4096 Sep 29 16:24 ..
+-rw-r--r-- 1 hermes hermes 143339 Sep 29 16:20 1-start.png
+-rw-r--r-- 1 hermes hermes 138743 Sep 29 16:20 2-gefecht.png
+-rw-r--r-- 1 hermes hermes 134667 Sep 29 16:20 3-spaet.png
+-rw-r--r-- 1 hermes hermes 102830 Sep 29 16:20 4-ende.png
+[0m
+[0m→ [0mRead .reviews/shots/1-start.png
+[0m→ [0mRead .reviews/shots/2-gefecht.png
+[0m→ [0mRead .reviews/design-review-kimi.log
+[0m→ [0mRead .reviews/shots/3-spaet.png
+[0m→ [0mRead .reviews/shots/4-ende.png
+[0m
+[0m$ [0mls /opt/data/projekte/formation-battle/.reviews/
+design-review-kimi.log
+shot-descriptions.md
+shots
+[0m
+[0m← [0mWrite .reviews/design-review-kimi.md
+Wrote file successfully.
+[0m
+Der Design-Review ist abgeschlossen und liegt unter `.reviews/design-review-kimi.md`.
+
+**Hinweis vorab:** Mein Modell kann die PNG-Screenshots nicht direkt einsehen (kein Bildeingang) — die Bewertung stützt sich daher auf die neutralen Beobachtungen aus `.reviews/shot-descriptions.md` plus den tatsächlichen Rendering-/CSS-Code in `index.html`, wobei ich jeden Befund im Code verifiziert habe.
+
+## Kernaussagen des Berichts
+
+**Antwort auf die Leitfrage:** Nur teilweise stimmig. Farbsemantik (blau/rot) und UI-Rahmen sind sauber, aber die Feldlesbarkeit hat drei kritische Lücken:
+
+### KRITISCH (3 Befunde)
+- **K1 — Keine Feld↔Sidebar-Zuordnung:** Karten sind nummeriert (1–5), aber `drawTroop` (index.html:738–748) zeichnet keinerlei Nummern/Banner auf dem Feld → Zuordnung unmöglich.
+- **K2 — Startkamera zeigt keine Armee:** `init()` (Z. 1146) zentriert auf Kartenmitte; beide Armeen liegen bei Zoom 0.72 außerhalb des Sichtfelds → erster Eindruck ist eine leere Wiese.
+- **K3 — Formationsgeometrie zerfällt im Gefecht:** Slot-Verfolgung + Separation + sofortiges Entfernen Gefallener (Z. 900–924, 988–993) erzeugen "lockere Keile" statt der von der SPEC geforderten sichtbaren Reihen.
+
+### WICHTIG (5 Befunde)
+- **W1** Projektile praktisch unsichtbar (9×1.6 Weltpixel, blass, Z. 786–796)
+- **W2** Auswahlring zu dünn, kein Hover-Feedback (Z. 740–746)
+- **W3** HP-Abdunklung zerstört Blau/Rot-Semantik bei Verwundeten (Z. 687–690)
+- **W4** Kein Treffer-Feedback — Counter-Mechanik ("Kern des Spiels") unsichtbar
+- **W5** Flucht nur in der Sidebar lesbar, nicht auf dem Feld
+
+### MINOR (6 Befunde)
+Hilfeleiste überläuft (M1), Befehlsmarker farblich doppeldeutig (M2), keine Kartenbegrenzung (M3), kleine Statuslabels (M4), kein Neustart im Pause-Panel (M5), Terrain-Dekor in Aufstellungszonen (M6).
+
+**Top-3-Quick-Wins:** K2 (1 Zeile), K1 (~10 Zeilen Feld-Banner), W1 (~5 Zeilen Projektil-Darstellung). Deutschsprachigkeit, Ein-Datei-Deliverable, Header-Kommentar und 60-FPS-Architektur sind dagegen voll SPEC-konform.

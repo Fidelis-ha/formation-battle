@@ -1,0 +1,25 @@
+OpenCode via RouterLab
+Model: glm-5.3-flash
+Endpoint: http://127.0.0.1:34943 -> https://api.routerlab.ch/v1
+
+[0m
+> build · glm-5.3-flash
+[0m
+[0m✱ [0mGlob "**/*"[90m 12 matches[0m
+[0m→ [0mRead docs/SPEC-formation-battle.md
+[0m→ [0mRead index.html
+[0m
+[0m← [0mWrite .reviews/func-ux-code-review.md
+Wrote file successfully.
+[0m
+Beide Dateien sind vollständig gelesen. Jetzt prüfe ich die SPEC-Mechaniken systematisch gegen den Code (Counter, Flanke, Charge, Moral, KI, Victory, Timestep, Speicher) und schreibe den Bericht.
+Bericht liegt unter `.reviews/func-ux-code-review.md`.
+
+Kurzfassung der Kernbefunde:
+
+- **KRITISCH (A1):** Zielsuchen in `updateCombat` (index.html:944) und `updateProjectiles` (index.html:405) prüfen `alive` nicht — tote Soldaten werden im selben Schritt erneut getroffen → doppelte `deadCount`/Verluste, vorzeitiger Moral-Bruch, falsche Endstatistik. Fix: 2× `if (!v.alive) continue;`
+- **WICHTIG:** `t.dest` wird nach Ankunft nie gecleart (index.html:873) → Auto-Angriff dead (Bedingung `!t.dest`, Zeile 820) und Sidebar zeigt dauerhaft „Marsch“. Außerdem Auslegungsfrage: Housecarl-Bonus x1.3 greift nicht gegen Schützen im Nahkampf (index.html:175), was die SPEC-Lesart „→ alles Nahkampf“ eng auslegt.
+- **Funktion sonst ✅:** Alle 7 Typen, 4 von 5 Counter-Multiplikatoren exakt, Flankencheck (>54,5°) in Nah- und Fernkampf, Charge mit Verbrauch/Wiederladen, Moral 50 %/70 %, Rückruf, KI je Typ ohne Cheats, Victory inkl. Flucht, fixer 60fps-Timestep.
+- **Speicher ✅:** Projektile (keep-Filter), Marker/Truppen (splice), Soldaten (filter), keine wachsenden Arrays, keine Dangling Refs (alive-Guards), Listener sauber — einziger weicher Punkt: nicht gecancelter `setTimeout` (index.html:1036).
+- **UX ✅:** Steuerung vollständig wie SPEC, durchgehend deutsch; Minors: kein Rally-Marker, Befehle während Pause möglich, tote Karten anklickbar.
+- **Qualität ✅:** Alle 7 Sektionen vorhanden und im Kopf korrekt deklariert; Minors: tote Variable `t.id`/`nextTroopId`, `clamp` falsch sekioniert, Marker-Dekrement hardcoded `1/60`, `G.result` fehlt im Literal, englische Kommentar-Fragmente („unprotected assault“, „Deadzone/Stalemate“).

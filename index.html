@@ -1,0 +1,1331 @@
+<!DOCTYPE html>
+<html lang="de">
+<!--
+  ============================================================================
+  Formation Battle — eigenständige Web-Implementierung
+  ============================================================================
+  Lizenz: MIT-License
+  Autor:  Kairos für Marc
+
+  Inspirationsquelle (nur Spielmechanik, KEIN Original-Code, KEINE
+  Original-Assets): https://itch.io/okiaki/formation-battle
+  Dies ist eine vollständig eigenständige Implementierung der dokumentierten
+  Spielmechaniken (SPEC: docs/SPEC-formation-battle.md).
+
+  Alles in einer Datei: inline CSS + JS, Canvas-2D-Rendering, keine
+  externen Abhängigkeiten. Läuft über file:// und jeden statischen Host.
+
+  Code-Gliederung (Abschnitts-Marker im <script>):
+    CONFIG   — Weltkonstanten, Einheiten-Statistiken, Aufstellung
+    ENTITIES — Truppen-/Soldaten-Objekte, Moral, Formation
+    COMBAT   — Counter-Multiplikatoren, Schadensformel, Fern-/Nahkampf,
+               Kavallerie-Ansturm, Flanken-/Rückenschaden
+    AI       — Verhalten der 5 KI-Truppen (keine Cheats)
+    INPUT    — Maus + Tastatur (Auswahl, Befehle, Kamera, Pause)
+    RENDER   — Terrain, Truppen, Projektile, Marker (Canvas 2D)
+    MAIN     — Fixed-Timestep-Simulation (60 FPS), UI-Update, Spielende
+  ============================================================================
+-->
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:">
+<title>Formation Battle</title>
+<style>
+  /* ======================= UI / LAYOUT ======================= */
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #1a2416; }
+  body { font-family: "Segoe UI", Arial, sans-serif; user-select: none; }
+  #game { display: block; width: 100vw; height: 100vh; cursor: crosshair; }
+
+  /* Linke Truppen-Leiste */
+  #sidebar {
+    position: fixed; left: 10px; top: 54px; width: 236px;
+    display: flex; flex-direction: column; gap: 6px; z-index: 5;
+  }
+  .card {
+    display: flex; align-items: center; gap: 8px;
+    background: rgba(20, 28, 18, 0.88);
+    border: 2px solid #3d4a35; border-radius: 8px;
+    padding: 6px 8px; color: #dfe7d8; cursor: pointer;
+    transition: border-color .12s, background .12s;
+  }
+  .card.sel { border-color: #7fb2ff; background: rgba(35, 55, 90, 0.92); }
+  .card.dead { opacity: 0.35; filter: grayscale(1); }
+  .card .icon { width: 30px; height: 30px; flex: 0 0 30px; color: #9fc2ff; }
+  .card .icon svg { width: 100%; height: 100%; }
+  .card .info { flex: 1; min-width: 0; }
+  .card .cname { font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .card .crow { display: flex; justify-content: space-between; font-size: 11px; color: #b8c6ad; }
+  .card .auto.on { color: #8fd98f; }
+  .card .auto.off { color: #e0a35c; }
+  .card .mbar { height: 6px; background: #2b3524; border-radius: 3px; margin: 3px 0 2px; overflow: hidden; }
+  .card .mfill { height: 100%; width: 100%; background: #7fc47f; border-radius: 3px; }
+  .card .mfill.rout { background: #d95f5f; }
+  .card .state { font-size: 12px; color: #c4d2b4; }
+  .card .state.rout { color: #ff8b8b; font-weight: 700; }
+
+  /* Kopfzeile */
+  #topbar {
+    position: fixed; top: 0; left: 0; right: 0; height: 44px; z-index: 5;
+    background: rgba(15, 20, 12, 0.88); border-bottom: 1px solid #3d4a35;
+    display: flex; align-items: center; justify-content: center; gap: 24px;
+    color: #e6ecdf; font-size: 16px; font-weight: 600;
+  }
+  #topbar .side { font-size: 13px; padding: 2px 10px; border-radius: 4px; }
+  #topbar .pl { background: #24406b; }
+  #topbar .ai { background: #6b2424; }
+
+  /* Hinweiszeile */
+  #hint {
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 5;
+    background: rgba(15, 20, 12, 0.82); border-top: 1px solid #3d4a35;
+    color: #b8c6ad; font-size: 12px; text-align: center; padding: 5px 8px;
+    display: flex; flex-wrap: wrap; justify-content: center;
+    white-space: normal; line-height: 1.5;
+  }
+  @media (max-width: 1100px) { #hint { font-size: 11px; } }
+  @media (max-width: 800px)  { #hint { font-size: 10px; padding: 4px 6px; } }
+
+  /* Overlay: Pause / Sieg / Niederlage */
+  #overlay {
+    position: fixed; inset: 0; z-index: 10; display: none;
+    background: rgba(8, 10, 6, 0.72);
+    align-items: center; justify-content: center;
+  }
+  #overlay.show { display: flex; }
+  #panel {
+    background: #1d2617; border: 2px solid #55684a; border-radius: 12px;
+    padding: 28px 40px; text-align: center; color: #e6ecdf; min-width: 340px;
+    box-shadow: 0 8px 40px rgba(0,0,0,.6);
+  }
+  #panel h1 { font-size: 34px; margin-bottom: 10px; letter-spacing: 2px; }
+  #panel h1.win { color: #8fd98f; }
+  #panel h1.lose { color: #e07373; }
+  #panel table { margin: 12px auto 16px; border-collapse: collapse; font-size: 14px; }
+  #panel td { padding: 3px 14px; text-align: left; }
+  #panel td:last-child { text-align: right; font-weight: 600; }
+  #panel button {
+    font-size: 15px; padding: 8px 22px; border-radius: 6px; cursor: pointer;
+    background: #3a5a8f; color: #fff; border: 1px solid #6d8fc4;
+  }
+  #panel button:hover { background: #4a6ca8; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="topbar">
+  <span class="side pl">Spieler</span>
+  <span id="clock">00:00</span>
+  <span class="side ai">Gegner</span>
+</div>
+
+<div id="sidebar"></div>
+
+<div id="hint">
+  Linksklick: Truppe w&auml;hlen &nbsp;&middot;&nbsp; Rechtsklick: Bewegungs-/Angriffsbefehl
+  &nbsp;&middot;&nbsp; Mausrad: Zoom &nbsp;&middot;&nbsp; Mittelklick+Ziehen: Kamera
+  &nbsp;&middot;&nbsp; Q: Auto-Angriff &nbsp;&middot;&nbsp; 1&ndash;5: Truppe &nbsp;&middot;&nbsp; P/ESC: Pause
+</div>
+
+<div id="overlay"><div id="panel"></div></div>
+
+<script>
+"use strict";
+/* ======================================================================
+ *  CONFIG — Weltkonstanten, Einheitenwerte, Counter, Aufstellung
+ * ====================================================================== */
+
+const WORLD  = { w: 2600, h: 1700 };   // Kartenabmessungen in Weltpixeln
+const STEP   = 1 / 60;                 // fixer Simulationsschritt (60 FPS)
+const REACH  = 22;                     // Nahkampf-Kontaktdistanz (Soldat zu Soldat)
+const CHARGE_SPEED    = 95;            // Ansturm-Schwelle: bewusst UNTER dem Kavallerie-Tempo (135) — jeder bewegte Kontakt zählt als Ansturm (gewusst so, begrenzt über chargeReady)
+const CHARGE_MULT     = 2.5;           // Ansturm-Bonus beim Aufprall
+const FORMATION_MULT  = 1.5;           // Flanken-/Rückenschaden
+const RALLY_THRESHOLD = 0.70;          // Flucht-Schwelle nach Sammeln (statt 0.50)
+const AI_THINK_EVERY  = 0.5;           // Sekunden zwischen KI-Entscheidungen
+
+/* Die 7 Einheitentypen.
+   hp: Lebenspunkte je Soldat, dmg: Fernkampfschaden, range: Fernkampfreichweite
+   (0 = reine Nahkampfeinheit), interval: Angriffsintervall (s),
+   speed: Truppentempo, meleeDmg: Nahkampfschaden, rows/cols: Formation. */
+const UNITS = {
+  archer:     { name: "Bogenschützen", hp: 40, dmg: 8,  range: 260, interval: 2.0,
+                speed: 60,  meleeDmg: 3,  radius: 6, rows: 3, cols: 4 },
+  skirmisher: { name: "Plänkler",      hp: 35, dmg: 14, range: 150, interval: 2.6,
+                speed: 78,  meleeDmg: 4,  radius: 6, rows: 2, cols: 6 },
+  infantry:   { name: "Infanterie",    hp: 60, dmg: 0,  range: 0,  interval: 1.2,
+                speed: 70,  meleeDmg: 10, radius: 6, rows: 3, cols: 4 },
+  housecarl:  { name: "Hauscarls",     hp: 95, dmg: 0,  range: 0,  interval: 1.5,
+                speed: 45,  meleeDmg: 9,  radius: 7, rows: 2, cols: 5 },
+  spearman:   { name: "Speerkämpfer",  hp: 55, dmg: 0,  range: 0,  interval: 1.4,
+                speed: 55,  meleeDmg: 7,  radius: 6, rows: 2, cols: 6 },
+  swordsman:  { name: "Schwertkämpfer",hp: 55, dmg: 0,  range: 0,  interval: 1.1,
+                speed: 72,  meleeDmg: 14, radius: 6, rows: 3, cols: 4 },
+  cavalry:    { name: "Kavallerie",    hp: 85, dmg: 0,  range: 0,  interval: 1.4,
+                speed: 135, meleeDmg: 15, radius: 7, rows: 2, cols: 5 },
+};
+
+const RANGED_TYPES = new Set(["archer", "skirmisher"]);
+
+/* Counter-Multiplikatoren (Kern des Spiels, laut SPEC hardcoded).
+   Signatur: counterMult(angreiferTyp, verteidigerTyp, istFernkampf) */
+function counterMult(atk, def, isRanged) {
+  if (atk === "spearman" && def === "cavalry") return 3.0;                 // Speere prallen Ansturm ab
+  if (atk === "cavalry" && (def === "archer" || def === "skirmisher")) return 2.5; // Reiter metzeln Schützen
+  if ((atk === "archer" || atk === "skirmisher") && def === "swordsman") return 1.5; // unprotected assault
+  if (atk === "swordsman" &&
+      (def === "archer" || def === "skirmisher" || def === "spearman")) return 2.0; // Nahkampf-Überlegenheit
+  if (atk === "housecarl" && !isRanged) return 1.3; // Rüstungsbonus: Nahkampf gegen ALLE Verteidiger (SPEC: "alles Nahkampf"), auch Schützen im Nahkampf
+  return 1.0;
+}
+
+/* Fixe Standard-Aufstellung beider Seiten (laut SPEC kein Truppen-Editor).
+   Spieler = Blau (Team 0, links), KI = Rot (Team 1, rechts). */
+const DEPLOY = [
+  [ // Spieler (Basis links)
+    { type: "spearman",  x:  640, y:  480, facing: 0 },
+    { type: "housecarl", x:  640, y:  850, facing: 0 },
+    { type: "infantry",  x:  640, y: 1220, facing: 0 },
+    { type: "archer",    x:  430, y:  850, facing: 0 },
+    { type: "cavalry",   x:  380, y: 1440, facing: 0 },
+  ],
+  [ // KI (Basis rechts)
+    { type: "infantry",   x: 1960, y:  480, facing: Math.PI },
+    { type: "spearman",   x: 1960, y:  850, facing: Math.PI },
+    { type: "swordsman",  x: 1960, y: 1220, facing: Math.PI },
+    { type: "skirmisher", x: 2170, y:  850, facing: Math.PI },
+    { type: "cavalry",    x: 2170, y:  400, facing: Math.PI },
+  ],
+];
+
+/* Kleine Inline-SVG-Icons für die Truppenkarten. */
+const ICONS = {
+  archer: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M8 4q8 8 0 16"/><line x1="8" y1="4" x2="8" y2="20"/><line x1="8" y1="12" x2="19" y2="12"/><path d="M16 9l3 3-3 3"/></svg>',
+  skirmisher: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><line x1="5" y1="19" x2="18" y2="6"/><path d="M14 5h5v5"/></svg>',
+  infantry: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><line x1="6" y1="18" x2="17" y2="7"/><path d="M14 5l5 5"/><line x1="4" y1="15" x2="9" y2="20"/></svg>',
+  housecarl: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><line x1="7" y1="21" x2="14" y2="10"/><path d="M11 4a7 7 0 0 1 9 9c-4 1-8-2-9-9z"/></svg>',
+  spearman: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><line x1="9" y1="15" x2="19" y2="5"/><path d="M15 4h5v5"/><circle cx="7" cy="17" r="3.4"/></svg>',
+  swordsman: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><line x1="7" y1="17" x2="18" y2="6"/><line x1="5" y1="12" x2="12" y2="19"/><line x1="15" y1="4" x2="20" y2="9"/></svg>',
+  cavalry: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 20c0-7 3-11 8-12l1-4 3 3 3 1-2 3c1 5-2 9-7 9z"/></svg>',
+};
+
+/* ======================================================================
+ *  ENTITIES — globaler Spielzustand, Truppen- & Soldaten-Objekte
+ * ====================================================================== */
+
+const G = {
+  troops: [],        // alle lebenden Truppen
+  projectiles: [],   // fliegende Pfeile/Speere
+  markers: [],       // Befehls-Marker (verblassen)
+  simTime: 0,        // Schlachtdauer in Sekunden
+  losses: { 0: 0, 1: 0 },  // tote Soldaten je Seite
+  fled:   { 0: 0, 1: 0 },  // geflohene Truppen je Seite
+  playerTroops: [],  // Reihenfolge für Karten & Tasten 1-5
+  selected: null,    // aktuell gewählte Spielernummer (0-4) bzw. Truppe
+  hover: null,       // eigene Truppe unter dem Mauszeiger (Hover-Feedback)
+  paused: false,
+  over: false,
+  endTimer: null,    // setTimeout-Handle des Ergebnis-Overlays (init cleart)
+  aiTimer: 0,
+  cam: { x: WORLD.w / 2, y: WORLD.h / 2, zoom: 0.72 },
+};
+
+let nextTroopId = 1;
+
+/* Erzeugt eine Truppe (Formation aus rows*cols Soldaten) an Position. */
+function makeTroop(type, team, x, y, facing) {
+  const u = UNITS[type];
+  const t = {
+    id: nextTroopId++,
+    type, team,
+    x, y, facing,
+    dest: null,          // Bewegungsziel (Weltpunkt) oder null
+    targetTroop: null,   // explizites Angriffsziel oder null
+    autoAttack: true,    // Q-Toggle (nur Spieler relevant)
+    alive: true,         // Truppe existiert noch (cleanup/checkVictory)
+    routing: false,      // Moral gebrochen, Truppe flieht
+    routThreshold: 0.5,  // Flucht bei >50% Verlusten (nach Sammeln 70%)
+    deadCount: 0,
+    size: 0,
+    engagedWith: null,   // Truppe im Nahkontakt (für Ausrichtung)
+    hold: false,         // steht im Gefecht / schießt — Anker bewegt sich nicht
+    chargeReady: true,   // Kavallerie: Ansturm "geladen", wenn vorher langsam
+    speedSmooth: 0,      // geglättete Anker-Geschwindigkeit (für Ansturm)
+    burstLeft: type === "skirmisher" ? 3 : 0, // Skirmisher-Burst: TRUPPENWEIT — die ersten 3 Projektile der ganzen Truppe sind x1.5 (nicht pro Soldat)
+    flankSign: Math.random() < 0.5 ? 1 : -1,  // KI-Kavallerie: Flankenseite
+    soldiers: [],
+  };
+  for (let row = 0; row < u.rows; row++) {
+    for (let col = 0; col < u.cols; col++) {
+      t.soldiers.push({
+        row, col,
+        x: x, y: y,             // Startposition; Formation rückt gleich in die Slots
+        hp: u.hp, maxHp: u.hp,
+        cd: Math.random() * u.interval, // versetzte Angriffs-Cools
+        alive: true,
+      });
+    }
+  }
+  t.size = t.soldiers.length;
+  return t;
+}
+
+/* Position eines Formationsslots in Weltkoordinaten.
+   Reihe 0 ist die vorderste Reihe (in Blickrichtung), tiefere Reihen hinten. */
+function slotPos(t, s) {
+  const u = UNITS[t.type];
+  const lat = (s.col - (u.cols - 1) / 2) * 24;   // seitlich
+  const dep = s.row * 27;                        // in die Tiefe (nach hinten)
+  const fx = Math.cos(t.facing), fy = Math.sin(t.facing);
+  return { x: t.x - fy * lat - fx * dep, y: t.y + fx * lat - fy * dep };
+}
+
+/* Truppe bricht und flieht zum nächsten Kartenrand. */
+function routNow(t) {
+  if (t.routing) return;
+  t.routing = true;
+  t.targetTroop = null;
+  t.dest = nearestEdgePoint(t.x, t.y);
+}
+
+/* Spieler kann eine fliehende Truppe zurückrufen (Rechtsklick-Befehl). */
+function rallyTroop(t, destX, destY) {
+  t.routing = false;
+  t.routThreshold = RALLY_THRESHOLD;
+  t.dest = { x: destX, y: destY };
+}
+
+function nearestEdgePoint(x, y) {
+  const d = [x, WORLD.w - x, y, WORLD.h - y];
+  const i = d.indexOf(Math.min(...d));
+  if (i === 0) return { x: -80, y: y };
+  if (i === 1) return { x: WORLD.w + 80, y: y };
+  if (i === 2) return { x: x, y: -80 };
+  return { x: x, y: WORLD.h + 80 };
+}
+
+/* ======================================================================
+ *  COMBAT — Schadensformel, Formationstreffer, Nah-/Fernkampf, Ansturm
+ * ====================================================================== */
+
+const rand15 = () => 0.85 + Math.random() * 0.30; // ±15% Zufall
+
+/* Winkel-Differenz normalisiert auf [-PI, PI]. */
+function angleDiff(a, b) {
+  let d = a - b;
+  while (d > Math.PI) d -= 2 * Math.PI;
+  while (d < -Math.PI) d += 2 * Math.PI;
+  return d;
+}
+
+/* Formationsschaden: Angriff aus Flanke/Rücken → Verteidiger erhält x1.5.
+   Richtungscheck relativ zur Ausrichtung der verteidigenden Truppe. */
+function formationMult(defTroop, fromX, fromY) {
+  const rel = Math.abs(angleDiff(
+    defTroop.facing,
+    Math.atan2(fromY - defTroop.y, fromX - defTroop.x)
+  ));
+  // > ~55° seitlich = Flanke/Rücken
+  return rel > Math.PI / 3.3 ? FORMATION_MULT : 1.0;
+}
+
+/* Truppe flieht, wenn >50% (bzw. 70% nach Sammeln) Verluste. */
+function checkMoraleLosses(t) {
+  if (!t.routing && t.deadCount / t.size > t.routThreshold) routNow(t);
+}
+
+/* Ein Schadenstreffer auf einen einzelnen Soldaten. */
+function applyDamage(victimTroop, victim, dmg, fromX, fromY, isMelee) {
+  victim.hp -= dmg;
+  if (victim.hp > 0) return;
+  victim.alive = false;
+  victim.deadAt = G.simTime; // Gefallener bleibt 2,5 s als Silhouette liegen
+  victimTroop.deadCount++;
+  G.losses[victimTroop.team]++;
+  checkMoraleLosses(victimTroop);
+  // Flanken-/Rückenangriff im Nahkampf bricht die Moral sofort (SPEC)
+  if (isMelee && !victimTroop.routing &&
+      formationMult(victimTroop, fromX, fromY) > 1.0) {
+    routNow(victimTroop);
+  }
+}
+
+/* Nahkampfschlag eines Soldaten gegen einen Gegner-Soldaten. */
+function meleeStrike(atTroop, atkSoldier, defTroop, defSoldier) {
+  let base = UNITS[atTroop.type].meleeDmg;
+  let mult = counterMult(atTroop.type, defTroop.type, false);
+
+  // Kavallerie-Ansturm: Bonus nur bei ausreichender Geschwindigkeit beim
+  // Aufprall; danach ist der Ansturm "verbraucht" (wird nur langsam wieder
+  // geladen, wenn die Truppe nahezu steht).
+  if (atTroop.type === "cavalry" && atTroop.chargeReady) {
+    if (atTroop.speedSmooth > CHARGE_SPEED) {
+      mult *= CHARGE_MULT;
+      atTroop.chargeReady = false;
+    }
+  }
+
+  const form = formationMult(defTroop, atTroop.x, atTroop.y);
+  const dmg = base * mult * form * rand15();
+  applyDamage(defTroop, defSoldier, dmg, atTroop.x, atTroop.y, true);
+}
+
+/* Fernkampfschuss: erzeugt ein Projektil mit leicht Streuung auf den
+   anvisierten Soldaten; beim Einschlag trifft der Nächste (oder danebene). */
+function rangedFire(atTroop, s, defTroop, defSoldier) {
+  const u = UNITS[atTroop.type];
+  const dist = Math.hypot(defSoldier.x - s.x, defSoldier.y - s.y);
+  const spread = dist / 45; // Streuung wächst mit Distanz
+  const ix = defSoldier.x + (Math.random() * 2 - 1) * spread;
+  const iy = defSoldier.y + (Math.random() * 2 - 1) * spread;
+
+  let dmg = u.dmg * counterMult(atTroop.type, defTroop.type, true);
+  if (atTroop.type === "skirmisher" && atTroop.burstLeft > 0) {
+    dmg *= 1.5;             // Skirmisher-Burst: erste 3 Würfe x1.5
+    atTroop.burstLeft--;
+  }
+
+  G.projectiles.push({
+    x: s.x, y: s.y, ix, iy,
+    speed: atTroop.type === "archer" ? 340 : 230,
+    kind: atTroop.type === "archer" ? "arrow" : "javelin",
+    team: atTroop.team,
+    atkType: atTroop.type,
+    atkTroop: atTroop,      // für Formationstreffer-Richtungscheck
+    dmg,
+  });
+  s.cd = u.interval * (0.85 + Math.random() * 0.3);
+}
+
+/* Projektil bewegt sich zum festen Einschlagpunkt und trifft dort. */
+function updateProjectiles(dt) {
+  const keep = [];
+  for (const p of G.projectiles) {
+    const dx = p.ix - p.x, dy = p.iy - p.y;
+    const d = Math.hypot(dx, dy);
+    if (d <= p.speed * dt) {
+      // Einschlag: nächsten Gegner-Soldaten im Radius treffen
+      let best = null, bestD = 13;
+      for (const t of G.troops) {
+        if (t.team === p.team || !t.alive) continue;
+        for (const s of t.soldiers) {
+          if (!s.alive) continue; // Gefallene sind kein gültiges Ziel mehr
+          const dd = Math.hypot(s.x - p.ix, s.y - p.iy);
+          if (dd < bestD) { bestD = dd; best = { t, s }; }
+        }
+      }
+      if (best) {
+        const form = formationMult(best.t, p.atkTroop.x, p.atkTroop.y);
+        applyDamage(best.t, best.s, p.dmg * form * rand15(),
+                    p.atkTroop.x, p.atkTroop.y, false);
+        // Einschlag-Feedback: kleiner heller Punkt am Treffer
+        G.markers.push({ kind: "hit", x: best.s.x, y: best.s.y, life: 0.3 });
+      }
+      continue; // Projektil entfernen (kein wachsendes Array)
+    }
+    p.x += (dx / d) * p.speed * dt;
+    p.y += (dy / d) * p.speed * dt;
+    p.ang = Math.atan2(dy, dx);
+    keep.push(p);
+  }
+  G.projectiles = keep;
+}
+
+/* Distanz zwischen den nächstgelegenen Soldaten zweier Truppen. */
+function soldierGap(t1, t2) {
+  let best = Infinity;
+  for (const a of t1.soldiers) {
+    if (!a.alive) continue;
+    for (const b of t2.soldiers) {
+      if (!b.alive) continue;
+      const d = Math.hypot(a.x - b.x, a.y - b.y);
+      if (d < best) best = d;
+    }
+  }
+  return best;
+}
+
+/* ======================================================================
+ *  AI — Verhalten der 5 KI-Truppen (gleiche Regeln, keine Cheats)
+ * ====================================================================== */
+
+function aiThink(t) {
+  if (t.routing) return;
+  const foes = G.troops.filter(o => o.alive && o.team !== t.team);
+  if (foes.length === 0) return;
+
+  // Nächstgelegene Feindtruppe
+  let near = foes[0], nearD = Infinity;
+  for (const f of foes) {
+    const d = Math.hypot(f.x - t.x, f.y - t.y);
+    if (d < nearD) { nearD = d; near = f; }
+  }
+
+  const u = UNITS[t.type];
+
+  if (RANGED_TYPES.has(t.type)) {
+    /* Fernkampf hält Distanz: zurückweichen, wenn der Feind zu nah kommt. */
+    const pref = u.range * 0.75;
+    if (nearD < pref * 0.8) {
+      const dx = t.x - near.x, dy = t.y - near.y, d = Math.hypot(dx, dy) || 1;
+      t.dest = { x: clamp(t.x + (dx / d) * 220, 60, WORLD.w - 60),
+                 y: clamp(t.y + (dy / d) * 220, 60, WORLD.h - 60) };
+    } else if (nearD > u.range * 0.9) {
+      const dx = near.x - t.x, dy = near.y - t.y, d = Math.hypot(dx, dy) || 1;
+      t.dest = { x: t.x + (dx / d) * (nearD - pref),
+                 y: t.y + (dy / d) * (nearD - pref) };
+    } else {
+      t.dest = null; // in Position — halten und schießen
+    }
+    t.targetTroop = near;
+    return;
+  }
+
+  if (t.type === "cavalry") {
+    /* Kavallerie sucht die Flanke: Ziel liegt seitlich/hinter der
+       Feindformation, damit Ansturm + Flankenbonus wirken. */
+    const fx = Math.cos(near.facing), fy = Math.sin(near.facing);
+    t.dest = {
+      x: clamp(near.x - fx * 70 - fy * 110 * t.flankSign, 60, WORLD.w - 60),
+      y: clamp(near.y - fy * 70 + fx * 110 * t.flankSign, 60, WORLD.h - 60),
+    };
+    t.targetTroop = near;
+    return;
+  }
+
+  if (t.type === "spearman") {
+    /* Speere bleiben nahe der eigenen Linie, bereit gegen Kavallerie —
+       aber nur, solange feindliche Kavallerie aktuell bedrohlich ist
+       (Anker-zu-Anker < 600px). Sonst: Standard-Angriff wie Infanterie. */
+    const cav = foes.find(f => f.type === "cavalry");
+    const ownBaseX = t.team === 0 ? 520 : WORLD.w - 520;
+    if (cav && Math.hypot(cav.x - t.x, cav.y - t.y) < 600) {
+      const gx = ownBaseX + (t.team === 0 ? 140 : -140);
+      t.dest = { x: gx, y: clamp(cav.y, 120, WORLD.h - 120) };
+      if (Math.hypot(cav.x - t.x, cav.y - t.y) < 200) t.targetTroop = cav;
+      else t.targetTroop = null; // Position halten, Auto-Angriff deckt Rest
+    } else {
+      t.dest = { x: near.x, y: near.y };
+      t.targetTroop = near;
+    }
+    return;
+  }
+
+  /* Standard (Infanterie, Hauscarls, Schwertkämpfer): vorrücken & angreifen. */
+  t.dest = { x: near.x, y: near.y };
+  t.targetTroop = near;
+}
+
+/* ======================================================================
+ *  INPUT — Maus (Auswahl, Befehle, Kamera) und Tastatur
+ * ====================================================================== */
+
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+let dpr = 1, vw = 0, vh = 0;
+
+function resize() {
+  dpr = window.devicePixelRatio || 1;
+  vw = window.innerWidth; vh = window.innerHeight;
+  canvas.width = Math.round(vw * dpr);
+  canvas.height = Math.round(vh * dpr);
+}
+window.addEventListener("resize", resize);
+
+function screenToWorld(sx, sy) {
+  return {
+    x: G.cam.x + (sx - vw / 2) / G.cam.zoom,
+    y: G.cam.y + (sy - vh / 2) / G.cam.zoom,
+  };
+}
+
+function clampCam() {
+  const halfW = vw / 2 / G.cam.zoom, halfH = vh / 2 / G.cam.zoom;
+  G.cam.x = clamp(G.cam.x, Math.min(halfW, WORLD.w / 2), Math.max(WORLD.w - halfW, WORLD.w / 2));
+  G.cam.y = clamp(G.cam.y, Math.min(halfH, WORLD.h / 2), Math.max(WORLD.h - halfH, WORLD.h / 2));
+}
+const clamp = (v, lo, hi) => v < lo ? lo : (v > hi ? hi : v);
+
+/* Truppe an Weltpunkt finden (Soldat nah genug oder Anker). */
+function troopAt(wx, wy, team) {
+  let best = null, bestD = 30;
+  for (const t of G.troops) {
+    if (!t.alive) continue;
+    if (team !== undefined && t.team !== team) continue;
+    for (const s of t.soldiers) {
+      if (!s.alive) continue;
+      const d = Math.hypot(s.x - wx, s.y - wy);
+      if (d < bestD) { bestD = d; best = t; }
+    }
+    const da = Math.hypot(t.x - wx, t.y - wy);
+    if (da < 55 && da < bestD + 20) { bestD = da; best = t; }
+  }
+  return best;
+}
+
+let dragging = false, dragStart = null;
+
+canvas.addEventListener("mousedown", (e) => {
+  if (G.over) return;
+  if (G.paused) return; // Pause: keine Auswahl/Befehle/Marker (konsistent zum Overlay)
+  if (e.button === 1) {                    // Mittelklick: Kamera-Ziehen
+    dragging = true;
+    dragStart = { mx: e.clientX, my: e.clientY, cx: G.cam.x, cy: G.cam.y };
+    e.preventDefault();
+  } else if (e.button === 0) {             // Linksklick: Truppe auswählen
+    const w = screenToWorld(e.clientX, e.clientY);
+    const t = troopAt(w.x, w.y, 0);
+    G.selected = t ? G.playerTroops.indexOf(t) : null;
+  } else if (e.button === 2) {             // Rechtsklick: Befehl
+    issueOrder(e.clientX, e.clientY);
+  }
+});
+
+window.addEventListener("mousemove", (e) => {
+  if (dragging && dragStart) {
+    G.cam.x = dragStart.cx - (e.clientX - dragStart.mx) / G.cam.zoom;
+    G.cam.y = dragStart.cy - (e.clientY - dragStart.my) / G.cam.zoom;
+    clampCam();
+  } else {
+    // Hover-Feedback: eigene Truppe unter dem Mauszeiger vormerken
+    const w = screenToWorld(e.clientX, e.clientY);
+    G.hover = troopAt(w.x, w.y, 0);
+  }
+});
+window.addEventListener("mouseup", (e) => {
+  if (e.button === 1) { dragging = false; dragStart = null; }
+  G.hover = null; // Hover aufräumen
+});
+canvas.addEventListener("mouseleave", () => { G.hover = null; });
+canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+
+/* Rechtsklick: Bewegungsbefehl — oder Angriffsbefehl auf Feindtruppe. */
+function issueOrder(sx, sy) {
+  const t = selectedTroop();
+  if (!t) return;
+  const w = screenToWorld(sx, sy);
+
+  if (t.routing) {           // fliehende Truppe zurückrufen
+    rallyTroop(t, clamp(w.x, 40, WORLD.w - 40), clamp(w.y, 40, WORLD.h - 40));
+    // Feedback für den Rückruf (Move-Marker)
+    G.markers.push({ kind: "move", x: t.dest.x, y: t.dest.y, life: 1.2 });
+    return;
+  }
+  const foe = troopAt(w.x, w.y, 1 - t.team);
+  if (foe) {
+    t.targetTroop = foe;     // Angriffsbefehl
+    t.dest = { x: foe.x, y: foe.y };
+    G.markers.push({ kind: "attack", troop: foe, life: 1.2 });
+  } else {
+    t.targetTroop = null;    // reiner Bewegungsbefehl
+    t.dest = { x: clamp(w.x, 30, WORLD.w - 30), y: clamp(w.y, 30, WORLD.h - 30) };
+    G.markers.push({ kind: "move", x: t.dest.x, y: t.dest.y, life: 1.2 });
+  }
+}
+
+canvas.addEventListener("wheel", (e) => {
+  e.preventDefault();
+  const before = screenToWorld(e.clientX, e.clientY);
+  G.cam.zoom = clamp(G.cam.zoom * (e.deltaY < 0 ? 1.12 : 0.89), 0.35, 2.2);
+  const after = screenToWorld(e.clientX, e.clientY);
+  G.cam.x += before.x - after.x;   // Zoom um Mauszeiger
+  G.cam.y += before.y - after.y;
+  clampCam();
+}, { passive: false });
+
+window.addEventListener("keydown", (e) => {
+  const k = e.key.toLowerCase();
+  if (k === "escape" || k === "p") {         // Pause
+    if (!G.over) G.paused = !G.paused;
+    updateOverlay();
+  } else if (k === "q") {                    // Auto-Angriff togglen
+    const t = selectedTroop();
+    if (t) t.autoAttack = !t.autoAttack;
+  } else if (k >= "1" && k <= "5") {         // Schnellauswahl 1-5
+    const i = parseInt(k, 10) - 1;
+    if (G.playerTroops[i] && G.playerTroops[i].alive) G.selected = i;
+  }
+});
+
+function selectedTroop() {
+  if (G.selected === null) return null;
+  const t = G.playerTroops[G.selected];
+  return (t && t.alive) ? t : null;
+}
+
+/* ======================================================================
+ *  RENDER — Terrain, Truppen, Projektile, Marker (Canvas 2D)
+ * ====================================================================== */
+
+let terrainCanvas = null;
+
+/* Terrain einmalig vorrendern: Grasbasis, Flecken, ein paar Felsen/Bäume. */
+function buildTerrain() {
+  terrainCanvas = document.createElement("canvas");
+  terrainCanvas.width = WORLD.w;
+  terrainCanvas.height = WORLD.h;
+  const tc = terrainCanvas.getContext("2d");
+  tc.fillStyle = "#4d6b3a";
+  tc.fillRect(0, 0, WORLD.w, WORLD.h);
+  for (let i = 0; i < 900; i++) {           // Gras-Flecken
+    const x = Math.random() * WORLD.w, y = Math.random() * WORLD.h;
+    const r = 6 + Math.random() * 26;
+    tc.fillStyle = Math.random() < 0.5 ? "rgba(90,120,64,0.35)" : "rgba(60,86,44,0.35)";
+    tc.beginPath(); tc.arc(x, y, r, 0, 7); tc.fill();
+  }
+  // Dezente dunkelgrüne Randzone entlang der Weltgrenze (~60px breit)
+  tc.strokeStyle = "rgba(24,34,16,0.55)";
+  tc.lineWidth = 120;                        // 120px Strich, zentriert auf die Kante = 60px innen
+  tc.strokeRect(0, 0, WORLD.w, WORLD.h);
+  // Aufstellungszonen freihalten: Deko nicht in Deploy-Bereichen (Radius 200px)
+  const deploys = [];
+  for (const row of DEPLOY) for (const d of row) deploys.push(d);
+  const clearOfDeploys = (x, y) =>
+    deploys.every(d => Math.hypot(x - d.x, y - d.y) > 200);
+  for (let i = 0; i < 46; i++) {            // Felsen
+    const x = Math.random() * WORLD.w, y = Math.random() * WORLD.h;
+    if (!clearOfDeploys(x, y)) continue;
+    tc.fillStyle = "#7c7f76";
+    tc.beginPath(); tc.arc(x, y, 4 + Math.random() * 8, 0, 7); tc.fill();
+    tc.fillStyle = "rgba(255,255,255,0.15)";
+    tc.beginPath(); tc.arc(x - 2, y - 2, 2 + Math.random() * 3, 0, 7); tc.fill();
+  }
+  for (let i = 0; i < 24; i++) {            // Bäume (rein dekorativ)
+    const x = Math.random() * WORLD.w, y = Math.random() * WORLD.h;
+    if (!clearOfDeploys(x, y)) continue;
+    tc.fillStyle = "rgba(0,0,0,0.2)";
+    tc.beginPath(); tc.arc(x + 3, y + 4, 9, 0, 7); tc.fill();
+    tc.fillStyle = "#33512a";
+    tc.beginPath(); tc.arc(x, y, 9, 0, 7); tc.fill();
+    tc.fillStyle = "#42653a";
+    tc.beginPath(); tc.arc(x - 2, y - 3, 5, 0, 7); tc.fill();
+  }
+}
+
+const TEAM_COLOR = ["#4f8fe0", "#d95f5f"];
+const TEAM_DARK  = ["#2c5a94", "#8f3434"];
+
+/* Typ-Kürzel für Feld-Banner der KI-Truppen. */
+const TYPE_SHORT = {
+  archer: "BO", skirmisher: "PL", infantry: "IN", housecarl: "HK",
+  spearman: "SP", swordsman: "SW", cavalry: "KA",
+};
+
+/* Einzelner Soldat: Kreis + Waffen-Silhouette, in Blickrichtung gedreht.
+   Teamfarbe bleibt KONSTANT (keine HP-Abdunklung) — der Zustand wird
+   stattdessen über den Mini-HP-Balken unter dem Soldaten gezeigt. */
+function drawSoldier(t, s) {
+  const u = UNITS[t.type];
+
+  // Gefallener: dunkle Silhouette bleibt 2,5 s liegen (Verluste ablesbar)
+  if (!s.alive) {
+    ctx.fillStyle = "rgba(18,22,14,0.6)";
+    ctx.beginPath();
+    ctx.ellipse(s.x, s.y, u.radius + 2, (u.radius + 2) * 0.6, t.facing, 0, 7);
+    ctx.fill();
+    return;
+  }
+
+  ctx.save();
+  ctx.translate(s.x, s.y);
+  ctx.rotate(t.facing);
+
+  // Schatten
+  ctx.fillStyle = "rgba(0,0,0,0.25)";
+  ctx.beginPath(); ctx.ellipse(1, 2, u.radius + 1, u.radius * 0.8 + 1, 0, 0, 7); ctx.fill();
+
+  // Körper — Teamfarbe konstant
+  ctx.fillStyle = TEAM_COLOR[t.team];
+  ctx.strokeStyle = "#141810";
+  ctx.lineWidth = 1.2;
+
+  if (t.type === "cavalry") { // Pferd + Reiter
+    ctx.beginPath(); ctx.ellipse(0, 0, u.radius + 4, u.radius, 0, 0, 7); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = TEAM_DARK[t.team];
+    ctx.beginPath(); ctx.arc(-1, 0, 3.2, 0, 7); ctx.fill();
+  } else {
+    ctx.beginPath(); ctx.arc(0, 0, u.radius, 0, 7); ctx.fill(); ctx.stroke();
+  }
+
+  // Waffen-Silhouetten
+  ctx.strokeStyle = "#e8e4d8";
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  switch (t.type) {
+    case "archer": {       // Bogen (Bogenlinie quer zur Blickrichtung)
+      ctx.arc(4, 0, 5, -1.2, 1.2);
+      ctx.moveTo(6, -4.6); ctx.lineTo(6, 4.6);
+      break;
+    }
+    case "skirmisher":     // Wurfspeer
+      ctx.moveTo(-2, 3); ctx.lineTo(9, -3);
+      break;
+    case "spearman":       // langer Speer + Schild
+      ctx.moveTo(-3, 2); ctx.lineTo(14, -2);
+      ctx.moveTo(3, 5); ctx.lineTo(3, -5);
+      break;
+    case "swordsman":      // Schwert, kein Schild
+      ctx.moveTo(2, 2); ctx.lineTo(10, -3);
+      break;
+    case "infantry":       // kurzes Schwert
+      ctx.moveTo(2, 1); ctx.lineTo(8, -2);
+      break;
+    case "housecarl": {    // Axt
+      ctx.moveTo(2, 2); ctx.lineTo(9, -3);
+      ctx.moveTo(9, -3); ctx.lineTo(12, -6);
+      break;
+    }
+    case "cavalry":        // Lanze
+      ctx.moveTo(-2, 2); ctx.lineTo(13, -2);
+      break;
+  }
+  ctx.stroke();
+  ctx.restore();
+
+  // Mini-HP-Balken unter dem Soldaten (nur bei Verwundung)
+  if (s.hp < s.maxHp) {
+    const frac = Math.max(0, s.hp / s.maxHp);
+    ctx.fillStyle = "rgba(0,0,0,0.55)";
+    ctx.fillRect(s.x - 5, s.y + u.radius + 3, 10, 2);
+    ctx.fillStyle = frac > 0.5 ? "#8fd98f" : (frac > 0.25 ? "#e0c35c" : "#d95f5f");
+    ctx.fillRect(s.x - 5, s.y + u.radius + 3, 10 * frac, 2);
+  }
+}
+
+function drawTroop(t) {
+  // Auswahlring der gewählten Truppe (deutlich sichtbar, Teamfarbe)
+  if (t.team === 0 && G.selected !== null && G.playerTroops[G.selected] === t) {
+    ctx.strokeStyle = "#9fc2ff";
+    ctx.lineWidth = 2.5;
+    ctx.setLineDash([6, 5]);
+    ctx.beginPath(); ctx.arc(t.x, t.y, 66, 0, 7); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  for (const s of t.soldiers) drawSoldier(t, s);
+
+  if (!t.alive) return;
+
+  // Feld-Banner: Truppennummer (Spieler 1-5) bzw. Typ-Kürzel (KI) über dem
+  // Anker — schließt die Zuordnung Feld ↔ Sidebar-Karte; nur ab Zoom > 0.5
+  if (G.cam.zoom > 0.5 && !t.routing) {
+    const label = t.team === 0
+      ? String(G.playerTroops.indexOf(t) + 1)
+      : (TYPE_SHORT[t.type] || "?");
+    ctx.strokeStyle = "#141810";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(t.x, t.y - 8); ctx.lineTo(t.x, t.y - 30); ctx.stroke();
+    ctx.fillStyle = TEAM_COLOR[t.team];
+    ctx.fillRect(t.x, t.y - 30, 17, 12);
+    ctx.lineWidth = 1;
+    ctx.strokeRect(t.x, t.y - 30, 17, 12);
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 9px sans-serif";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(label, t.x + 8.5, t.y - 24);
+  }
+
+  // Weiße Fahne: Truppe flieht (Moral gebrochen) — auf dem Feld lesbar
+  if (t.routing) {
+    ctx.strokeStyle = "#e8e4d8";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(t.x, t.y - 8); ctx.lineTo(t.x, t.y - 34); ctx.stroke();
+    ctx.fillStyle = "#f4f4ec";
+    ctx.beginPath();
+    ctx.moveTo(t.x, t.y - 34);
+    ctx.lineTo(t.x + 14, t.y - 30);
+    ctx.lineTo(t.x, t.y - 26);
+    ctx.closePath(); ctx.fill();
+  }
+}
+
+function render() {
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = "#141a10";
+  ctx.fillRect(0, 0, vw, vh);
+
+  ctx.save();
+  ctx.translate(vw / 2, vh / 2);
+  ctx.scale(G.cam.zoom, G.cam.zoom);
+  ctx.translate(-G.cam.x, -G.cam.y);
+
+  if (terrainCanvas) ctx.drawImage(terrainCanvas, 0, 0);
+
+  // Bewegungs-Marker (verblassende Flaggen)
+  for (const m of G.markers) {
+    ctx.globalAlpha = Math.min(1, m.life);
+    if (m.kind === "move") {
+      ctx.strokeStyle = "#9fc2ff"; ctx.lineWidth = 2;   // Bewegung: hellblau
+      ctx.beginPath(); ctx.arc(m.x, m.y, 8, 0, 7); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(m.x - 4, m.y + 4); ctx.lineTo(m.x + 4, m.y - 4);
+      ctx.moveTo(m.x + 4, m.y + 4); ctx.lineTo(m.x - 4, m.y - 4); ctx.stroke();
+    } else if (m.kind === "attack" && m.troop.alive) {
+      ctx.strokeStyle = "#ffb347"; ctx.lineWidth = 2;   // Angriff: orange (Rot bleibt Feind)
+      ctx.beginPath(); ctx.arc(m.troop.x, m.troop.y, 40, 0, 7); ctx.stroke();
+    } else if (m.kind === "hit") {
+      // Einschlag-Marker: kleiner heller Punkt beim Projektil-Treffer
+      ctx.fillStyle = "#fff2c0";
+      ctx.beginPath(); ctx.arc(m.x, m.y, 2.2, 0, 7); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // Angriffsziel der gewählten Truppe rot markieren
+  const sel = selectedTroop();
+  if (sel && sel.targetTroop && sel.targetTroop.alive) {
+    ctx.strokeStyle = "#ff5b5b"; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.arc(sel.targetTroop.x, sel.targetTroop.y, 72, 0, 7); ctx.stroke();
+  }
+
+  // Hover-Feedback: eigene Truppe unter dem Mauszeiger schwach umringen
+  if (G.hover && G.hover.alive) {
+    ctx.globalAlpha = 0.4;
+    ctx.strokeStyle = "#9fc2ff";
+    ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.arc(G.hover.x, G.hover.y, 66, 0, 7); ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
+  for (const t of G.troops) drawTroop(t);
+
+  // Projektile: Pfeile kurz, Wurfspiele länger — deutlich sichtbar gezeichnet
+  for (const p of G.projectiles) {
+    const len = p.kind === "arrow" ? 14 : 18;
+    ctx.strokeStyle = p.kind === "arrow" ? "#f0e6c8" : "#e0d0a5";
+    ctx.lineWidth = 2.5;
+    const a = p.ang || 0;
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y);
+    ctx.lineTo(p.x - Math.cos(a) * len, p.y - Math.sin(a) * len);
+    ctx.stroke();
+    // heller Kopf-Punkt
+    ctx.fillStyle = "#fff6d8";
+    ctx.beginPath(); ctx.arc(p.x, p.y, 2, 0, 7); ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+/* ======================================================================
+ *  MAIN — Simulation (fixer Timestep), Truppen-Update, UI, Spielende
+ * ====================================================================== */
+
+/* Bewegung, Ausrichtung und Ansturm-Bereitschaft einer Truppe. */
+function updateTroop(t, dt) {
+  if (!t.alive) return;
+  t.engagedWith = null;
+
+  // Angriffsziel verfolgen: Ziel teilweise tot → abwählen
+  if (t.targetTroop && (!t.targetTroop.alive || livingCount(t.targetTroop) === 0)) {
+    t.targetTroop = null;
+    if (t.dest && !t.routing) t.dest = null;
+  }
+
+  // Spieler-Truppen mit Auto-Angriff: Feinde in unmittelbarer Nähe
+  // automatisch ins Gefecht ziehen (ohne expliziten Befehl). Nahkampf
+  // reagiert auf 260px, damit das Gefecht nach Ausfällen einer Truppe
+  // weiterkocht und nicht einschläft.
+  if (!t.routing && t.team === 0 && t.autoAttack && !t.targetTroop && !t.dest) {
+    const trig = RANGED_TYPES.has(t.type) ? 60 : 260;
+    for (const f of G.troops) {
+      if (f.team === t.team || !f.alive) continue;
+      if (soldierGap(t, f) < trig) { t.targetTroop = f; break; }
+    }
+  }
+
+  // Halten, wenn Kontakt/Reichweite erreicht; sonst zum Ziel bewegen
+  let wantMove = null;
+  if (t.routing) {
+    wantMove = t.dest; // Flucht: weiter zum Kartenrand
+  } else if (t.targetTroop) {
+    const gap = soldierGap(t, t.targetTroop);
+    const u = UNITS[t.type];
+    if (RANGED_TYPES.has(t.type)) {
+      t.hold = gap < u.range * 0.95;
+      if (!t.hold) wantMove = t.targetTroop;
+    } else {
+      // Kontakt bei REACH*1.2: Die Annäherung stoppt am Gefechtsrand,
+      // statt auf die Ankerposition hineinzulaufen. Im Band zwischen
+      // REACH und REACH*1.2 wird trotzdem noch nachgerückt, damit der
+      // Nahkampf (Schlagdistanz REACH) nie einschläft.
+      t.hold = gap < REACH * 1.2;
+      if (gap > REACH) wantMove = t.targetTroop;
+    }
+  } else if (t.dest) {
+    t.hold = false;
+    wantMove = t.dest;
+  } else {
+    t.hold = false;
+  }
+
+  const u = UNITS[t.type];
+  const spd = u.speed * (t.routing ? 1.15 : 1);
+  const ox = t.x, oy = t.y;
+  // Bewegungsziel: Bei Truppen-Zielen auf den NÄCHSTGELEGENEN Feind-Soldaten
+  // zulaufen statt auf den Feind-Anker. Liegen die Anker bereits < 6px
+  // beieinander (Deadzone), die Soldaten aber noch außerhalb der Schlag-
+  // reichweite, würde der Anker sonst nie nachrücken → Stalemate.
+  let moveTarget = null;
+  if (wantMove) {
+    let tx = wantMove.x, ty = wantMove.y;
+    if (wantMove.soldiers) {
+      let best = Infinity;
+      for (const v of wantMove.soldiers) {
+        if (!v.alive) continue;
+        const d2 = (v.x - t.x) * (v.x - t.x) + (v.y - t.y) * (v.y - t.y);
+        if (d2 < best) { best = d2; tx = v.x; ty = v.y; }
+      }
+    }
+    moveTarget = { x: tx, y: ty };
+    const dx = tx - t.x, dy = ty - t.y;
+    const d = Math.hypot(dx, dy);
+    if (d > 6) {
+      const step = Math.min(spd * dt, d);
+      t.x += (dx / d) * step;
+      t.y += (dy / d) * step;
+    } else if (!wantMove.soldiers) {
+      // Punkt-Ziel erreicht: dest freigeben, damit Auto-Angriff wieder
+      // greift und der Kartenstatus nicht auf "Marsch" stehen bleibt
+      t.dest = null;
+    }
+  }
+
+  // geglättete Geschwindigkeit → Ansturm-Bereitschaft der Kavallerie
+  const inst = Math.hypot(t.x - ox, t.y - oy) / dt;
+  t.speedSmooth = t.speedSmooth * 0.85 + inst * 0.15;
+  if (t.type === "cavalry" && t.speedSmooth < 30) t.chargeReady = true;
+
+  // Ausrichtung: Feind im Gefecht → ihm zuwenden, sonst Laufrichtung
+  if (!t.routing) {
+    for (const f of G.troops) {
+      if (f.team === t.team || !f.alive) continue;
+      if (soldierGap(t, f) < REACH * 2.2) { t.engagedWith = f; break; }
+    }
+  }
+  if (t.engagedWith) {
+    t.facing = Math.atan2(t.engagedWith.y - t.y, t.engagedWith.x - t.x);
+  } else if (moveTarget) {
+    const dx = moveTarget.x - t.x, dy = moveTarget.y - t.y;
+    if (Math.hypot(dx, dy) > 6) t.facing = Math.atan2(dy, dx);
+  }
+
+  // Soldaten in ihre Formationsslots führen
+  const move = Math.min(1, dt * 5.5) * (t.hold ? 0.5 : 1);
+  for (const s of t.soldiers) {
+    if (!s.alive) continue; // Gefallene bleiben liegen, rücken nicht nach
+    const sp = slotPos(t, s);
+    s.x += (sp.x - s.x) * move;
+    s.y += (sp.y - s.y) * move;
+  }
+
+  // Minimale Soldaten-Separation: Die Slot-Verfolgung darf Soldaten
+  // nicht durch Feindformationen hindurchschieben — leicht ausrücken.
+  const minSep = REACH * 0.6;
+  for (const s of t.soldiers) {
+    if (!s.alive) continue;
+    for (const f of G.troops) {
+      if (f.team === t.team || !f.alive) continue;
+      for (const v of f.soldiers) {
+        if (!v.alive) continue;
+        const dx = s.x - v.x, dy = s.y - v.y;
+        const d2 = dx * dx + dy * dy;
+        if (d2 < minSep * minSep && d2 > 0.0001) {
+          const d = Math.sqrt(d2);
+          const push = (minSep - d) * 0.5 * move;
+          s.x += (dx / d) * push;
+          s.y += (dy / d) * push;
+        }
+      }
+    }
+  }
+}
+
+/* Kampf-Auswertung: Abklingzeiten, Nahkampf-Schläge, Fernkampf-Schüsse. */
+function updateCombat(dt) {
+  for (const t of G.troops) {
+    for (const s of t.soldiers) if (s.cd > 0) s.cd -= dt;
+  }
+
+  for (const t of G.troops) {
+    if (!t.alive) continue;
+    const u = UNITS[t.type];
+    for (const s of t.soldiers) {
+      if (!s.alive || s.cd > 0) continue;
+
+      // nächsten Feind-Soldaten suchen (positionsgenau, vorderste Reihe
+      // kämpft naturgemäß zuerst, da sie dem Feind am nächsten ist)
+      let best = null, bestD = REACH;
+      for (const f of G.troops) {
+        if (f.team === t.team || !f.alive) continue;
+        for (const v of f.soldiers) {
+          if (!v.alive) continue; // Gefallene sind kein gültiges Ziel mehr
+          const d = Math.hypot(v.x - s.x, v.y - s.y);
+          if (d < bestD) { bestD = d; best = { f, v }; }
+        }
+      }
+
+      if (best) {
+        // Nahkampf nur, wenn Auto-Angriff an ODER Ziel explizit befohlen
+        if (t.autoAttack || t.targetTroop === best.f) {
+          meleeStrike(t, s, best.f, best.v);
+          s.cd = u.interval * (0.8 + Math.random() * 0.4);
+        }
+        continue;
+      }
+
+      // Fernkampf (nur Schützentypen; keine Adjazenz mehr, s.o.)
+      if (RANGED_TYPES.has(t.type)) {
+        let tgt = (t.targetTroop && t.targetTroop.alive) ? t.targetTroop : null;
+        if (!tgt && t.autoAttack) {
+          // nächstgelegene Feindtruppe mit Soldat in Reichweite
+          let bd = u.range;
+          for (const f of G.troops) {
+            if (f.team === t.team || !f.alive) continue;
+            for (const v of f.soldiers) {
+              if (!v.alive) continue;
+              const d = Math.hypot(v.x - s.x, v.y - s.y);
+              if (d < bd) { bd = d; tgt = f; }
+            }
+          }
+        }
+        if (tgt) {
+          // nächstgelegenen Soldaten des Ziels in Reichweite treffen
+          let vBest = null, vD = u.range;
+          for (const v of tgt.soldiers) {
+            if (!v.alive) continue;
+            const d = Math.hypot(v.x - s.x, v.y - s.y);
+            if (d < vD) { vD = d; vBest = v; }
+          }
+          if (vBest) rangedFire(t, s, tgt, vBest);
+        }
+      }
+    }
+  }
+}
+
+/* Anzahl lebender Soldaten einer Truppe (Gefallene liegen ggf. noch im Array). */
+function livingCount(t) {
+  let n = 0;
+  for (const s of t.soldiers) if (s.alive) n++;
+  return n;
+}
+
+/* Tote Soldaten (erst nach 2,5 s als Silhouette) & vernichtete/geflohene
+   Truppen entfernen (kein Leck). */
+function cleanup() {
+  const expire = G.simTime - 2.5;
+  for (const t of G.troops) {
+    if (t.soldiers.some(s => !s.alive)) {
+      // Gefallene bleiben 2,5 s liegen, dann rausfiltern
+      t.soldiers = t.soldiers.filter(s => s.alive || s.deadAt > expire);
+    }
+  }
+  for (let i = G.troops.length - 1; i >= 0; i--) {
+    const t = G.troops[i];
+    // Vernichtet = kein LEBENDER Soldat mehr (Leichen dürfen noch liegen);
+    // die Truppe bleibt solange im Array, bis die letzten Leichen verweht sind
+    if (t.alive && !t.soldiers.some(s => s.alive)) t.alive = false;
+    if (t.routing && t.alive &&
+        (t.x < -70 || t.x > WORLD.w + 70 || t.y < -70 || t.y > WORLD.h + 70)) {
+      t.alive = false;           // vom Rand geflohen
+      G.fled[t.team]++;
+    }
+    const hasCorpses = t.soldiers.some(s => !s.alive);
+    if (!t.alive && !hasCorpses) G.troops.splice(i, 1);
+  }
+  for (let i = G.markers.length - 1; i >= 0; i--) {
+    G.markers[i].life -= 1 / 60;
+    if (G.markers[i].life <= 0) G.markers.splice(i, 1);
+  }
+}
+
+/* Ein Simulationsschritt (fix, 1/60 s). */
+function update(dt) {
+  G.simTime += dt;
+
+  // KI-Denkrunde
+  G.aiTimer += dt;
+  if (G.aiTimer >= AI_THINK_EVERY) {
+    G.aiTimer -= AI_THINK_EVERY;
+    for (const t of G.troops) if (t.team === 1 && t.alive) aiThink(t);
+  }
+
+  for (const t of G.troops) updateTroop(t, dt);
+  updateCombat(dt);
+  updateProjectiles(dt);
+  cleanup();
+  checkVictory();
+}
+
+/* Matchende, wenn alle Truppen einer Seite tot ODER geflohen sind. */
+function checkVictory() {
+  if (G.over) return;
+  const pl = G.troops.some(t => t.team === 0 && t.alive);
+  const ai = G.troops.some(t => t.team === 1 && t.alive);
+  if (pl && ai) return;
+  G.over = true;
+  G.result = pl && !ai ? "win" : (!pl && ai ? "lose" : "draw");
+  G.endTimer = setTimeout(updateOverlay, 900);
+}
+
+/* ---------------- UI (linke Truppenkarten, Overlay) ---------------- */
+
+const sidebar = document.getElementById("sidebar");
+const overlay = document.getElementById("overlay");
+const panel = document.getElementById("panel");
+let cardEls = [];
+
+function buildSidebar() {
+  sidebar.innerHTML = "";
+  cardEls = [];
+  G.playerTroops.forEach((t, i) => {
+    const u = UNITS[t.type];
+    const div = document.createElement("div");
+    div.className = "card";
+    div.innerHTML =
+      `<div class="icon">${ICONS[t.type]}</div>` +
+      `<div class="info">` +
+      `<div class="cname">${i + 1}. ${u.name}</div>` +
+      `<div class="crow"><span class="count"></span><span class="auto"></span></div>` +
+      `<div class="mbar"><div class="mfill"></div></div>` +
+      `<div class="state"></div>` +
+      `</div>`;
+    div.addEventListener("mousedown", (e) => {
+      // nur lebende Truppen auswählbar
+      if (e.button === 0 && G.playerTroops[i].alive) { G.selected = i; e.stopPropagation(); }
+    });
+    sidebar.appendChild(div);
+    cardEls.push(div);
+  });
+}
+
+function troopStateText(t) {
+  if (t.routing) return "FLUCHT!";
+  if (t.engagedWith) return "Gefecht";
+  if (t.dest) return "Marsch";
+  return "Bereit";
+}
+
+function updateSidebar() {
+  G.playerTroops.forEach((t, i) => {
+    const el = cardEls[i];
+    if (!el) return;
+    const alive = t.alive && G.troops.includes(t);
+    el.classList.toggle("dead", !alive);
+    el.classList.toggle("sel", G.selected === i && alive);
+    if (!alive) return;
+    const living = livingCount(t); // nur Lebende zählen (Gefallene liegen ggf. noch)
+    const frac = living / t.size;
+    el.querySelector(".count").textContent = `${living}/${t.size}`;
+    const auto = el.querySelector(".auto");
+    auto.textContent = `Auto: ${t.autoAttack ? "AN" : "AUS"}`;
+    auto.className = "auto " + (t.autoAttack ? "on" : "off");
+    const fill = el.querySelector(".mfill");
+    fill.style.width = (frac * 100).toFixed(0) + "%";
+    fill.classList.toggle("rout", t.routing);
+    const st = el.querySelector(".state");
+    st.textContent = troopStateText(t);
+    st.classList.toggle("rout", t.routing);
+  });
+}
+
+const clockEl = document.getElementById("clock");
+function updateClock() {
+  const s = Math.floor(G.simTime);
+  clockEl.textContent =
+    String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0");
+}
+
+/* Overlay: Pause bzw. Sieg/Niederlage mit Statistik. */
+function updateOverlay() {
+  if (G.over) {
+    const s = Math.floor(G.simTime);
+    const dur = String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0");
+    const title = G.result === "win" ? "SIEG" : G.result === "lose" ? "NIEDERLAGE" : "UNENTSCHIEDEN";
+    const cls = G.result === "win" ? "win" : G.result === "lose" ? "lose" : "";
+    panel.innerHTML =
+      `<h1 class="${cls}">${title}</h1>` +
+      `<table>` +
+      `<tr><td>Schlachtdauer</td><td>${dur}</td></tr>` +
+      `<tr><td>Verluste Spieler</td><td>${G.losses[0]} Soldaten</td></tr>` +
+      `<tr><td>Verluste Gegner</td><td>${G.losses[1]} Soldaten</td></tr>` +
+      `<tr><td>Geflohene Truppen (Spieler)</td><td>${G.fled[0]}</td></tr>` +
+      `<tr><td>Geflohene Truppen (Gegner)</td><td>${G.fled[1]}</td></tr>` +
+      `</table>` +
+      `<button id="btnRestart">Neue Schlacht</button>`;
+    overlay.classList.add("show");
+    document.getElementById("btnRestart").addEventListener("click", init);
+  } else if (G.paused) {
+    panel.innerHTML =
+      `<h1 style="font-size:28px">PAUSE</h1>` +
+      `<p style="color:#b8c6ad">P oder ESC zum Fortsetzen</p>` +
+      `<button id="btnPauseRestart" style="margin-top:14px">Schlacht neu starten</button>`;
+    overlay.classList.add("show");
+    document.getElementById("btnPauseRestart").addEventListener("click", init);
+  } else {
+    overlay.classList.remove("show");
+  }
+}
+
+/* ---------------- Start & Hauptschleife ---------------- */
+
+function init() {
+  clearTimeout(G.endTimer); // hängenden Ergebnis-Timer abbrechen
+  G.troops = [];
+  G.projectiles = [];
+  G.markers = [];
+  G.simTime = 0;
+  G.losses = { 0: 0, 1: 0 };
+  G.fled = { 0: 0, 1: 0 };
+  G.selected = 0;
+  G.paused = false;
+  G.over = false;
+  G.result = null;
+  G.aiTimer = 0;
+  G.cam = { x: 560, y: 850, zoom: 0.9 }; // Startkamera auf die eigene Armee
+  nextTroopId = 1;
+
+  for (let team = 0; team < 2; team++) {
+    for (const d of DEPLOY[team]) {
+      G.troops.push(makeTroop(d.type, team, d.x, d.y, d.facing));
+    }
+  }
+  G.playerTroops = G.troops.filter(t => t.team === 0);
+
+  buildSidebar();
+  updateOverlay();
+
+  // KI lässt ihre Truppen sofort antreten
+  for (const t of G.troops) if (t.team === 1) aiThink(t);
+}
+
+/* Fixer Timestep: Simulation läuft in konstanten 1/60-s-Schritten,
+   Rendering per requestAnimationFrame entkoppelt. */
+let last = performance.now();
+let acc = 0;
+
+function frame(now) {
+  requestAnimationFrame(frame);
+  let dt = (now - last) / 1000;
+  last = now;
+  if (dt > 0.25) dt = 0.25;      // Tab-Wechsel etc. abfedern
+  if (!G.paused && !G.over) {
+    acc += dt;
+    while (acc >= STEP) {
+      update(STEP);
+      acc -= STEP;
+    }
+  }
+  render();
+  updateSidebar();
+  updateClock();
+}
+
+buildTerrain();
+resize();
+init();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

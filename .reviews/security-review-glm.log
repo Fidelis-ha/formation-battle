@@ -1,0 +1,55 @@
+OpenCode via RouterLab
+Model: glm-5.3
+Endpoint: http://127.0.0.1:40323 -> https://api.routerlab.ch/v1
+
+[0m
+> build · glm-5.3
+[0m
+[0m$ [0mls -la /opt/data/projekte/formation-battle && wc -l /opt/data/projekte/formation-battle/index.html
+total 64
+drwxr-xr-x 4 hermes hermes  4096 Sep 29 16:20 .
+drwxr-xr-x 9 hermes hermes  4096 Sep 29 15:29 ..
+drwxr-xr-x 3 hermes hermes  4096 Sep 29 16:29 .reviews
+drwxr-xr-x 2 hermes hermes  4096 Sep 29 15:22 docs
+-rw-r--r-- 1 hermes hermes 45113 Sep 29 16:15 index.html
+1191 /opt/data/projekte/formation-battle/index.html
+[0m
+[0m$ [0mls -la /opt/data/projekte/formation-battle/.reviews /opt/data/projekte/formation-battle/docs
+/opt/data/projekte/formation-battle/.reviews:
+total 40
+drwxr-xr-x 3 hermes hermes  4096 Sep 29 16:29 .
+drwxr-xr-x 4 hermes hermes  4096 Sep 29 16:20 ..
+-rw-r--r-- 1 hermes hermes  3799 Sep 29 16:29 design-review-kimi.log
+-rw-r--r-- 1 hermes hermes 13570 Sep 29 16:29 design-review-kimi.md
+-rw-r--r-- 1 hermes hermes   567 Sep 29 16:30 security-review-glm.log
+-rw-r--r-- 1 hermes hermes  2825 Sep 29 16:23 shot-descriptions.md
+drwxr-xr-x 2 hermes hermes  4096 Sep 29 16:20 shots
+
+/opt/data/projekte/formation-battle/docs:
+total 16
+drwxr-xr-x 2 hermes hermes 4096 Sep 29 15:22 .
+drwxr-xr-x 4 hermes hermes 4096 Sep 29 16:20 ..
+-rw-r--r-- 1 hermes hermes 4795 Sep 29 15:22 SPEC-formation-battle.md
+[0m
+[0m→ [0mRead index.html
+[0m→ [0mRead docs/SPEC-formation-battle.md
+[0m→ [0mRead .reviews/security-review-glm.log
+[0m
+[0m$ [0mrg -n "fetch|XMLHttpRequest|WebSocket|localStorage|sessionStorage|indexedDB|document\.cookie|eval\(|new Function|import\(|location\.|URLSearchParams|document\.write|\.src\s*=|href\s*=|http://|https://|cdn|unpkg|jsdelivr|postMessage|Worker|navigator\.|onclick|onload=|onerror=" /opt/data/projekte/formation-battle/index.html || echo "KEINE TREFFER"
+11:  Original-Assets): https://itch.io/okiaki/formation-battle
+[0m
+[0m→ [0mRead .reviews/design-review-kimi.md[90m [limit=80][0m
+[0m
+[0m← [0mWrite .reviews/security-review-glm.md
+Wrote file successfully.
+[0m
+Analyse abgeschlossen. Alle geforderten Prüfpunkte wurden am Quelltext verifiziert (inkl. mechanischer Suche nach Netz-/Storage-/eval-/URL-APIs — null Treffer außer dem Kommentar-Link zur Inspirationsquelle in Zeile 11). Jetzt schreibe ich den Bericht.
+Bericht geschrieben: `.reviews/security-review-glm.md`
+
+**Ergebnis: 0 KRITISCH, 0 WICHTIG, 2 MINOR, 2 INFO** — für das Bedrohungsmodell (lokal, kein Auth, keine sensiblen Daten) sicher.
+
+Kernbefunde:
+- **M1 (MINOR):** `G.markers` wächst unbegrenzt bei Pause + Rechtsklick-Spam — Marker-Dekrement läuft nur in `cleanup()`/`update()`, `issueOrder()` prüft `G.paused` nicht (index.html:556, 1004). Einziges DoS-Restrisiko, nur selbst betreffend, 2-Zeilen-Fix.
+- **M2 (MINOR):** 3 innerHTML-Stellen (index.html:1053, 1112, 1125) — Datenfluss-Analyse bestätigt: alle Werte aus hardcodeden Konstanten/internen Zählern, **kein aktuelles XSS**, aber zukünftige Pflege-Falle bei dynamischen Werten.
+
+Sauber bestätigt: keine externen Dependencies (SPEC-konform), kein Datei-/Netz-/Storage-Zugriff, kein eval/inline-Handler, keine URL-Parameter-Nutzung, keine Prototyp-Pollution; `G.projectiles`/`G.troops` strikt bereinigt, Fixed-Timestep-Loop durch dt-Clamp begrenzt (keine Endlosschleife in `update()`).

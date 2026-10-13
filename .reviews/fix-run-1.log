@@ -1,0 +1,1269 @@
+OpenCode via RouterLab
+Model: glm-5.3-flash
+Endpoint: http://127.0.0.1:33133 -> https://api.routerlab.ch/v1
+
+[0m
+> build · glm-5.3-flash
+[0m
+[0m✱ [0mGlob "index.html"[90m 1 match[0m
+[0m
+[0m$ [0mls -la && ls .reviews/
+total 64
+drwxr-xr-x 4 hermes hermes  4096 Sep 29 16:20 .
+drwxr-xr-x 9 hermes hermes  4096 Sep 29 15:29 ..
+drwxr-xr-x 3 hermes hermes  4096 Sep 29 17:24 .reviews
+drwxr-xr-x 2 hermes hermes  4096 Sep 29 15:22 docs
+-rw-r--r-- 1 hermes hermes 45113 Sep 29 16:15 index.html
+design-review-kimi.log
+design-review-kimi.md
+fix-run-1.log
+func-ux-code-review.log
+func-ux-code-review.md
+security-review-glm.log
+security-review-glm.md
+shot-descriptions.md
+shots
+[0m
+[0m→ [0mRead .reviews/func-ux-code-review.md
+[0m→ [0mRead .reviews/design-review-kimi.md
+[0m→ [0mRead .reviews/security-review-glm.md
+[0m
+[0m# [0mTodos
+[•] index.html vollständig lesen
+[ ] F1-F8 Funktion-Fixes
+[ ] D1-D14 Design/Security-Fixes
+[ ] Validierung: node --check, grep-Selbsttest, Änderungsliste
+[0m
+[0m→ [0mRead index.html
+[0m
+[0m# [0mTodos
+[✓] index.html vollständig lesen
+[•] F1-F8 Funktion-Fixes
+[ ] D1-D14 Design/Security-Fixes
+[ ] Validierung: node --check, grep-Selbsttest, Änderungsliste
+[0m
+Alle drei Berichte und den Code gelesen. Jetzt arbeite ich die Fix-Liste ab.
+[0m← [0mEdit index.html
+Index: /opt/data/projekte/formation-battle/index.html
+===================================================================
+--- /opt/data/projekte/formation-battle/index.html
++++ /opt/data/projekte/formation-battle/index.html
+@@ -941,8 +941,9 @@
+ let best = null, bestD = REACH;
+ for (const f of G.troops) {
+   if (f.team === t.team || !f.alive) continue;
+   for (const v of f.soldiers) {
++    if (!v.alive) continue; // Gefallene sind kein gültiges Ziel mehr
+     const d = Math.hypot(v.x - s.x, v.y - s.y);
+     if (d < bestD) { bestD = d; best = { f, v }; }
+   }
+ }
+
+[0m
+[0m← [0mEdit index.html
+Index: /opt/data/projekte/formation-battle/index.html
+===================================================================
+--- /opt/data/projekte/formation-battle/index.html
++++ /opt/data/projekte/formation-battle/index.html
+@@ -402,8 +402,9 @@
+ let best = null, bestD = 13;
+ for (const t of G.troops) {
+   if (t.team === p.team || !t.alive) continue;
+   for (const s of t.soldiers) {
++    if (!s.alive) continue; // Gefallene sind kein gültiges Ziel mehr
+     const dd = Math.hypot(s.x - p.ix, s.y - p.iy);
+     if (dd < bestD) { bestD = dd; best = { t, s }; }
+   }
+ }
+
+[0m
+**F1** — Alive-Prüfungen in updateCombat und updateProjectiles:
+[0m← [0mEdit index.html
+Index: /opt/data/projekte/formation-battle/index.html
+===================================================================
+--- /opt/data/projekte/formation-battle/index.html
++++ /opt/data/projekte/formation-battle/index.html
+@@ -966,8 +966,9 @@
+ let bd = u.range;
+ for (const f of G.troops) {
+   if (f.team === t.team || !f.alive) continue;
+   for (const v of f.soldiers) {
++    if (!v.alive) continue;
+     const d = Math.hypot(v.x - s.x, v.y - s.y);
+     if (d < bd) { bd = d; tgt = f; }
+   }
+ }
+
+[0m
+[0m← [0mEdit index.html
+Index: /opt/data/projekte/formation-battle/index.html
+===================================================================
+--- /opt/data/projekte/formation-battle/index.html
++++ /opt/data/projekte/formation-battle/index.html
+@@ -976,8 +976,9 @@
+ if (tgt) {
+   // nächstgelegenen Soldaten des Ziels in Reichweite treffen
+   let vBest = null, vD = u.range;
+   for (const v of tgt.soldiers) {
++    if (!v.alive) continue;
+     const d = Math.hypot(v.x - s.x, v.y - s.y);
+     if (d < vD) { vD = d; vBest = v; }
+   }
+   if (vBest) rangedFire(t, s, tgt, vBest);
+
+[0m
+[0m← [0mEdit index.html
+Index: /opt/data/projekte/formation-battle/index.html
+===================================================================
+--- /opt/data/projekte/formation-battle/index.html
++++ /opt/data/projekte/formation-battle/index.html
+@@ -426,9 +426,11 @@
+ /* Distanz zwischen den nächstgelegenen Soldaten zweier Truppen. */
+ function soldierGap(t1, t2) {
+   let best = Infinity;
+   for (const a of t1.soldiers) {
++    if (!a.alive) continue;
+     for (const b of t2.soldiers) {
++      if (!b.alive) continue;
+       const d = Math.hypot(a.x - b.x, a.y - b.y);
+       if (d < best) best = d;
+     }
+   }
+
+[0m
+Konsistenz-Alive-Checks für die übrigen Soldaten-Suchen (nötig für D7, da Leichen liegen bleiben):
+[0m← [0mEdit index.html
+Index: /opt/data/projekte/formation-battle/index.html
+===================================================================
+--- /opt/data/projekte/formation-battle/index.html
++++ /opt/data/projekte/formation-battle/index.html
+@@ -865,8 +865,9 @@
+   let tx = wantMove.x, ty = wantMove.y;
+   if (wantMove.soldiers) {
+     let best = Infinity;
+     for (const v of wantMove.soldiers) {
++      if (!v.alive) continue;
+       const d2 = (v.x - t.x) * (v.x - t.x) + (v.y - t.y) * (v.y - t.y);
+       if (d2 < best) { best = d2; tx = v.x; ty = v.y; }
+     }
+   }
+@@ -876,8 +877,12 @@
+   if (d > 6) {
+     const step = Math.min(spd * dt, d);
+     t.x += (dx / d) * step;
+     t.y += (dy / d) * step;
++  } else if (!wantMove.soldiers) {
++    // Punkt-Ziel erreicht: dest freigeben, damit Auto-Angriff wieder
++    // greift und der Kartenstatus nicht auf "Marsch" stehen bleibt
++    t.dest = null;
+   }
+ }
+ 
+ // geglättete Geschwindigkeit → Ansturm-Bereitschaft der Kavallerie
+
+[0m
+[0m← [0mEdit index.html
+Index: /opt/data/projekte/formation-battle/index.html
+===================================================================
+--- /opt/data/projekte/formation-battle/index.html
++++ /opt/data/projekte/formation-battle/index.html
+@@ -906,8 +906,9 @@
+ 
+ // Soldaten in ihre Formationsslots führen
+ const move = Math.min(1, dt * 5.5) * (t.hold ? 0.5 : 1);
+ for (const s of t.soldiers) {
++  if (!s.alive) continue; // Gefallene bleiben liegen, rücken nicht nach
+   const sp = slotPos(t, s);
+   s.x += (sp.x - s.x) * move;
+   s.y += (sp.y - s.y) * move;
+ }
+
+[0m
+[0m← [0mEdit index.html
+Index: /opt/data/projekte/formation-battle/index.html
+===================================================================
+--- /opt/data/projekte/formation-battle/index.html
++++ /opt/data/projekte/formation-battle/index.html
+@@ -916,11 +916,13 @@
+ // Minimale Soldaten-Separation: Die Slot-Verfolgung darf Soldaten
+ // nicht durch Feindformationen hindurchschieben — leicht ausrücken.
+ const minSep = REACH * 0.6;
+ for (const s of t.soldiers) {
++  if (!s.alive) continue;
+   for (const f of G.troops) {
+     if (f.team === t.team || !f.alive) continue;
+     for (const v of f.soldiers) {
++      if (!v.alive) continue;
+       const dx = s.x - v.x, dy = s.y - v.y;
+       const d2 = dx * dx + dy * dy;
+       if (d2 < minSep * minSep && d2 > 0.0001) {
+         const d = Math.sqrt(d2);
+
+[0m
+**F2** — dest nach Punkt-Ankunft clearen (in updateTroop), plus Alive-Checks in Bewegungs-/Slot-/Separations-Loops:
+[0m← [0mEdit index.html
+Index: /opt/data/projekte/formation-battle/index.html
+===================================================================
+--- /opt/data/projekte/formation-battle/index.html
++++ /opt/data/projekte/formation-battle/index.html
+@@ -171,9 +171,9 @@
+   if (atk === "cavalry" && (def === "archer" || def === "skirmisher")) return 2.5; // Reiter metzeln Schützen
+   if ((atk === "archer" || atk === "skirmisher") && def === "swordsman") return 1.5; // unprotected assault
+   if (atk === "swordsman" &&
+       (def === "archer" || def === "skirmisher" || def === "spearman")) return 2.0; // Nahkampf-Überlegenheit
+-  if (atk === "housecarl" && !isRanged && !RANGED_TYPES.has(def)) return 1.3; // Rüstungsbonus im Nahkampf
++  if (atk === "housecarl" && !isRanged) return 1.3; // Rüstungsbonus: Nahkampf gegen ALLE Verteidiger (SPEC: "alles Nahkampf"), auch Schützen im Nahkampf
+   return 1.0;
+ }
+ 
+ /* Fixe Standard-Aufstellung beider Seiten (laut SPEC kein Truppen-Editor).
+
+[0m
+[0m← [0mEdit index.html
+Index: /opt/data/projekte/formation-battle/index.html
+===================================================================
+--- /opt/data/projekte/formation-battle/index.html
++++ /opt/data/projekte/formation-battle/index.html
+@@ -134,9 +134,9 @@
+ 
+ const WORLD  = { w: 2600, h: 1700 };   // Kartenabmessungen in Weltpixeln
+ const STEP   = 1 / 60;                 // fixer Simulationsschritt (60 FPS)
+ const REACH  = 22;                     // Nahkampf-Kontaktdistanz (Soldat zu Soldat)
+-const CHARGE_SPEED    = 95;            // min. Geschwindigkeit für Kavallerie-Ansturm
++const CHARGE_SPEED    = 95;            // Ansturm-Schwelle: bewusst UNTER dem Kavallerie-Tempo (135) — jeder bewegte Kontakt zählt als Ansturm (gewusst so, begrenzt über chargeReady)
+ const CHARGE_MULT     = 2.5;           // Ansturm-Bonus beim Aufprall
+ const FORMATION_MULT  = 1.5;           // Flanken-/Rückenschaden
+ const RALLY_THRESHOLD = 0.70;          // Flucht-Schwelle nach Sammeln (statt 0.50)
+ const AI_THINK_EVERY  = 0.5;           // Sekunden zwischen KI-Entscheidungen
+
+[0m
+[0m← [0mEdit index.html
+Index: /opt/data/projekte/formation-battle/index.html
+===================================================================
+--- /opt/data/projekte/formation-battle/index.html
++++ /opt/data/projekte/formation-battle/index.html
+@@ -245,9 +245,9 @@
+   engagedWith: null,   // Truppe im Nahkontakt (für Ausrichtung)
+   hold: false,         // steht im Gefecht / schießt — Anker bewegt sich nicht
+   chargeReady: true,   // Kavallerie: Ansturm "geladen", wenn vorher langsam
+   speedSmooth: 0,      // geglättete Anker-Geschwindigkeit (für Ansturm)
+-  burstLeft: type === "skirmisher" ? 3 : 0, // Skirmisher-Burst: erste 3 Würfe x1.5
++  burstLeft: type === "skirmisher" ? 3 : 0, // Skirmisher-Burst: TRUPPENWEIT — die ersten 3 Projektile der ganzen Truppe sind x1.5 (nicht pro Soldat)
+   flankSign: Math.random() < 0.5 ? 1 : -1,  // KI-Kavallerie: Flankenseite
+   soldiers: [],
+ };
+ for (let row = 0; row < u.rows; row++) {
+
+[0m
+**F3** (Housecarl vs. alle Nahkampf-Verteidiger) und **F8** (Kommentare):
+[0m← [0mEdit index.html
+Index: /opt/data/projekte/formation-battle/index.html
+===================================================================
+--- /opt/data/projekte/formation-battle/index.html
++++ /opt/data/projekte/formation-battle/index.html
+@@ -333,8 +333,9 @@
+ function applyDamage(victimTroop, victim, dmg, fromX, fromY, isMelee) {
+   victim.hp -= dmg;
+   if (victim.hp > 0) return;
+   victim.alive = false;
++  victim.deadAt = G.simTime; // Gefallener bleibt 2,5 s als Silhouette liegen
+   victimTroop.deadCount++;
+   G.losses[victimTroop.team]++;
+   checkMoraleLosses(victimTroop);
+   // Flanken-/Rückenangriff im Nahkampf bricht die Moral sofort (SPEC)
+
+[0m
+[0m← [0mEdit index.html
+Index: /opt/data/projekte/formation-battle/index.html
+===================================================================
+--- /opt/data/projekte/formation-battle/index.html
++++ /opt/data/projekte/formation-battle/index.html
+@@ -412,8 +412,10 @@
+   if (best) {
+     const form = formationMult(best.t, p.atkTroop.x, p.atkTroop.y);
+     applyDamage(best.t, best.s, p.dmg * form * rand15(),
+                 p.atkTroop.x, p.atkTroop.y, false);
++    // Einschlag-Feedback: kleiner heller Punkt am Treffer
++    G.markers.push({ kind: "hit", x: best.s.x, y: best.s.y, life: 0.3 });
+   }
+   continue; // Projektil entfernen (kein wachsendes Array)
+ }
+ p.x += (dx / d) * p.speed * dt;
+
+[0m
+**D7 Teil 1** — deadAt statt sofortiger Entfernung; **D3** Einschlag-Marker:
+[0m← [0mEdit index.html
+Index: /opt/data/projekte/formation-battle/index.html
+===================================================================
+--- /opt/data/projekte/formation-battle/index.html
++++ /opt/data/projekte/formation-battle/index.html
+@@ -1000,24 +1000,37 @@
+     }
+   }
+ }
+ 
+-/* Tote Soldaten & vernichtete/geflohene Truppen entfernen (kein Leck). */
++/* Anzahl lebender Soldaten einer Truppe (Gefallene liegen ggf. noch im Array). */
++function livingCount(t) {
++  let n = 0;
++  for (const s of t.soldiers) if (s.alive) n++;
++  return n;
++}
++
++/* Tote Soldaten (erst nach 2,5 s als Silhouette) & vernichtete/geflohene
++   Truppen entfernen (kein Leck). */
+ function cleanup() {
++  const expire = G.simTime - 2.5;
+   for (const t of G.troops) {
+     if (t.soldiers.some(s => !s.alive)) {
+-      t.soldiers = t.soldiers.filter(s => s.alive);
++      // Gefallene bleiben 2,5 s liegen, dann rausfiltern
++      t.soldiers = t.soldiers.filter(s => s.alive || s.deadAt > expire);
+     }
+   }
+   for (let i = G.troops.length - 1; i >= 0; i--) {
+     const t = G.troops[i];
+-    if (t.soldiers.length === 0) t.alive = false;
+-    if (t.routing &&
++    // Vernichtet = kein LEBENDER Soldat mehr (Leichen dürfen noch liegen);
++    // die Truppe bleibt solange im Array, bis die letzten Leichen verweht sind
++    if (t.alive && !t.soldiers.some(s => s.alive)) t.alive = false;
++    if (t.routing && t.alive &&
+         (t.x < -70 || t.x > WORLD.w + 70 || t.y < -70 || t.y > WORLD.h + 70)) {
+       t.alive = false;           // vom Rand geflohen
+       G.fled[t.team]++;
+     }
+-    if (!t.alive) G.troops.splice(i, 1);
++    const hasCorpses = t.soldiers.some(s => !s.alive);
++    if (!t.alive && !hasCorpses) G.troops.splice(i, 1);
+   }
+   for (let i = G.markers.length - 1; i >= 0; i--) {
+     G.markers[i].life -= 1 / 60;
+     if (G.markers[i].life <= 0) G.markers.splice(i, 1);
+
+[0m
+**D7 Teil 2** — cleanup: Leichen erst nach 2,5 s entfernen, Truppentod bei 0 lebenden Soldaten; `livingCount`-Helfer:
+[0m← [0mEdit index.html
+Index: /opt/data/projekte/formation-battle/index.html
+===================================================================
+--- /opt/data/projekte/formation-battle/index.html
++++ /opt/data/projekte/formation-battle/index.html
+@@ -1057,14 +1057,14 @@
+ 
+ /* Matchende, wenn alle Truppen einer Seite tot ODER geflohen sind. */
+ function checkVictory() {
+   if (G.over) return;
+-  const pl = G.troops.some(t => t.team === 0);
+-  const ai = G.troops.some(t => t.team === 1);
++  const pl = G.troops.some(t => t.team === 0 && t.alive);
++  const ai = G.troops.some(t => t.team === 1 && t.alive);
+   if (pl && ai) return;
+   G.over = true;
+   G.result = pl && !ai ? "win" : (!pl && ai ? "lose" : "draw");
+-  setTimeout(updateOverlay, 900);
++  G.endTimer = setTimeout(updateOverlay, 900);
+ }
+ 
+ /* ---------------- UI (linke Truppenkarten, Overlay) ---------------- */
+ 
+
+[0m
+**F7** — endTimer; checkVictory zählt nur lebende Truppen; targetTroop-Check auf lebende Soldaten:
+[0m← [0mEdit index.html
+Index: /opt/data/projekte/formation-battle/index.html
+===================================================================
+--- /opt/data/projekte/formation-battle/index.html
++++ /opt/data/projekte/formation-battle/index.html
+@@ -813,9 +813,9 @@
+ if (!t.alive) return;
+ t.engagedWith = null;
+ 
+ // Angriffsziel verfolgen: Ziel teilweise tot → abwählen
+-if (t.targetTroop && (!t.targetTroop.alive || t.targetTroop.soldiers.length === 0)) {
++if (t.targetTroop && (!t.targetTroop.alive || livingCount(t.targetTroop) === 0)) {
+   t.targetTroop = null;
+   if (t.dest && !t.routing) t.dest = null;
+ }
+ 
+
+[0m
+[0m← [0mEdit index.html
+Index: /opt/data/projekte/formation-battle/index.html
+===================================================================
+--- /opt/data/projekte/formation-battle/index.html
++++ /opt/data/projekte/formation-battle/index.html
+@@ -559,8 +559,9 @@
+ let dragging = false, dragStart = null;
+ 
+ canvas.addEventListener("mousedown", (e) => {
+   if (G.over) return;
++  if (G.paused) return; // Pause: keine Auswahl/Befehle/Marker (konsistent zum Overlay)
+   if (e.button === 1) {                    // Mittelklick: Kamera-Ziehen
+     dragging = true;
+     dragStart = { mx: e.clientX, my: e.clientY, cx: G.cam.x, cy: G.cam.y };
+     e.preventDefault();
+
+[0m
+[0m← [0mEdit index.html
+Index: /opt/data/projekte/formation-battle/index.html
+===================================================================
+--- /opt/data/projekte/formation-battle/index.html
++++ /opt/data/projekte/formation-battle/index.html
+@@ -576,15 +576,22 @@
+ 
+ window.addEventListener("mousemove", (e) => {
+   if (dragging && dragStart) {
+     G.cam.x = dragStart.cx - (e.clientX - dragStart.mx) / G.cam.zoom;
++    G.cam.y = dragStart.cy - (e.clientY - dragStart.cy) / G.cam.zoom;
+     G.cam.y = dragStart.cy - (e.clientY - dragStart.my) / G.cam.zoom;
+     clampCam();
++  } else {
++    // Hover-Feedback: eigene Truppe unter dem Mauszeiger vormerken
++    const w = screenToWorld(e.clientX, e.clientY);
++    G.hover = troopAt(w.x, w.y, 0);
+   }
+ });
+ window.addEventListener("mouseup", (e) => {
+   if (e.button === 1) { dragging = false; dragStart = null; }
++  G.hover = null; // Hover aufräumen
+ });
++canvas.addEventListener("mouseleave", () => { G.hover = null; });
+ canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+ 
+ /* Rechtsklick: Bewegungsbefehl — oder Angriffsbefehl auf Feindtruppe. */
+ function issueOrder(sx, sy) {
+
+[0m
+**F4, F6, D4** — Input: Pause-Return, Rally-Marker, Hover-Handling:
+[0m← [0mEdit index.html
+Index: /opt/data/projekte/formation-battle/index.html
+===================================================================
+--- /opt/data/projekte/formation-battle/index.html
++++ /opt/data/projekte/formation-battle/index.html
+@@ -576,9 +576,8 @@
+ 
+ window.addEventListener("mousemove", (e) => {
+   if (dragging && dragStart) {
+     G.cam.x = dragStart.cx - (e.clientX - dragStart.mx) / G.cam.zoom;
+-    G.cam.y = dragStart.cy - (e.clientY - dragStart.cy) / G.cam.zoom;
+     G.cam.y = dragStart.cy - (e.clientY - dragStart.my) / G.cam.zoom;
+     clampCam();
+   } else {
+     // Hover-Feedback: eigene Truppe unter dem Mauszeiger vormerken
+
+[0m
+Ich habe in dem Edit versehentlich eine fehlerhafte Doppelzeile eingefügt — korrigiere sofort:
+[0m← [0mEdit index.html
+Index: /opt/data/projekte/formation-battle/index.html
+===================================================================
+--- /opt/data/projekte/formation-battle/index.html
++++ /opt/data/projekte/formation-battle/index.html
+@@ -599,8 +599,10 @@
+ const w = screenToWorld(sx, sy);
+ 
+ if (t.routing) {           // fliehende Truppe zurückrufen
+   rallyTroop(t, clamp(w.x, 40, WORLD.w - 40), clamp(w.y, 40, WORLD.h - 40));
++  // Feedback für den Rückruf (Move-Marker)
++  G.markers.push({ kind: "move", x: t.dest.x, y: t.dest.y, life: 1.2 });
+   return;
+ }
+ const foe = troopAt(w.x, w.y, 1 - t.team);
+ if (foe) {
+
+[0m
+[0m← [0mEdit index.html
+Index: /opt/data/projekte/formation-battle/index.html
+===================================================================
+--- /opt/data/projekte/formation-battle/index.html
++++ /opt/data/projekte/formation-battle/index.html
+@@ -1097,9 +1097,10 @@
+     `<div class="mbar"><div class="mfill"></div></div>` +
+     `<div class="state"></div>` +
+     `</div>`;
+   div.addEventListener("mousedown", (e) => {
+-    if (e.button === 0) { G.selected = i; e.stopPropagation(); }
++    // nur lebende Truppen auswählbar
++    if (e.button === 0 && G.playerTroops[i].alive) { G.selected = i; e.stopPropagation(); }
+   });
+   sidebar.appendChild(div);
+   cardEls.push(div);
+ });
+
+[0m
+[0m← [0mEdit index.html
+Index: /opt/data/projekte/formation-battle/index.html
+===================================================================
+--- /opt/data/projekte/formation-battle/index.html
++++ /opt/data/projekte/formation-battle/index.html
+@@ -218,10 +218,12 @@
+   losses: { 0: 0, 1: 0 },  // tote Soldaten je Seite
+   fled:   { 0: 0, 1: 0 },  // geflohene Truppen je Seite
+   playerTroops: [],  // Reihenfolge für Karten & Tasten 1-5
+   selected: null,    // aktuell gewählte Spielernummer (0-4) bzw. Truppe
++  hover: null,       // eigene Truppe unter dem Mauszeiger (Hover-Feedback)
+   paused: false,
+   over: false,
++  endTimer: null,    // setTimeout-Handle des Ergebnis-Overlays (init cleart)
+   aiTimer: 0,
+   cam: { x: WORLD.w / 2, y: WORLD.h / 2, zoom: 0.72 },
+ };
+ 
+
+[0m
+**F6** — Rally-Marker; **F5** — Sidebar-Klick nur bei lebender Truppe; **G-Literal** um `hover`/`endTimer` ergänzen:
+[0m← [0mEdit index.html
+Index: /opt/data/projekte/formation-battle/index.html
+===================================================================
+--- /opt/data/projekte/formation-battle/index.html
++++ /opt/data/projekte/formation-battle/index.html
+@@ -546,10 +546,12 @@
+ /* Truppe an Weltpunkt finden (Soldat nah genug oder Anker). */
+ function troopAt(wx, wy, team) {
+   let best = null, bestD = 30;
+   for (const t of G.troops) {
++    if (!t.alive) continue;
+     if (team !== undefined && t.team !== team) continue;
+     for (const s of t.soldiers) {
++      if (!s.alive) continue;
+       const d = Math.hypot(s.x - wx, s.y - wy);
+       if (d < bestD) { bestD = d; best = t; }
+     }
+     const da = Math.hypot(t.x - wx, t.y - wy);
+
+[0m
+`troopAt` gegen Leichen/verstorbene Truppen absichern:
+[0m# [0mTodos
+[✓] index.html vollständig lesen
+[✓] F1-F8 Funktion-Fixes
+[•] D1-D14 Design/Security-Fixes
+[ ] Validierung: node --check, grep-Selbsttest, Änderungsliste
+[0m
+[0m← [0mEdit index.html
+Index: /opt/data/projekte/formation-battle/index.html
+===================================================================
+--- /opt/data/projekte/formation-battle/index.html
++++ /opt/data/projekte/formation-battle/index.html
+@@ -28,8 +28,9 @@
+ -->
+ <head>
+ <meta charset="utf-8">
+ <meta name="viewport" content="width=device-width, initial-scale=1">
++<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:">
+ <title>Formation Battle</title>
+ <style>
+   /* ======================= UI / LAYOUT ======================= */
+   * { box-sizing: border-box; margin: 0; padding: 0; }
+
+[0m
+[0m← [0mEdit index.html
+Index: /opt/data/projekte/formation-battle/index.html
+===================================================================
+--- /opt/data/projekte/formation-battle/index.html
++++ /opt/data/projekte/formation-battle/index.html
+@@ -80,9 +80,13 @@
+ #hint {
+   position: fixed; bottom: 0; left: 0; right: 0; z-index: 5;
+   background: rgba(15, 20, 12, 0.82); border-top: 1px solid #3d4a35;
+   color: #b8c6ad; font-size: 12px; text-align: center; padding: 5px 8px;
++  display: flex; flex-wrap: wrap; justify-content: center;
++  white-space: normal; line-height: 1.5;
+ }
++@media (max-width: 1100px) { #hint { font-size: 11px; } }
++@media (max-width: 800px)  { #hint { font-size: 10px; padding: 4px 6px; } }
+ 
+ /* Overlay: Pause / Sieg / Niederlage */
+ #overlay {
+   position: fixed; inset: 0; z-index: 10; display: none;
+
+[0m
+[0m← [0mEdit index.html
+Index: /opt/data/projekte/formation-battle/index.html
+===================================================================
+--- /opt/data/projekte/formation-battle/index.html
++++ /opt/data/projekte/formation-battle/index.html
+@@ -61,9 +61,9 @@
+ .card .auto.off { color: #e0a35c; }
+ .card .mbar { height: 6px; background: #2b3524; border-radius: 3px; margin: 3px 0 2px; overflow: hidden; }
+ .card .mfill { height: 100%; width: 100%; background: #7fc47f; border-radius: 3px; }
+ .card .mfill.rout { background: #d95f5f; }
+-.card .state { font-size: 10px; color: #a7b598; }
++.card .state { font-size: 12px; color: #c4d2b4; }
+ .card .state.rout { color: #ff8b8b; font-weight: 700; }
+ 
+ /* Kopfzeile */
+ #topbar {
+
+[0m
+Nun die Design-Fixes. **D14** (CSP), **D8** (#hint), **D11** (.state):
+[0m← [0mEdit index.html
+Index: /opt/data/projekte/formation-battle/index.html
+===================================================================
+--- /opt/data/projekte/formation-battle/index.html
++++ /opt/data/projekte/formation-battle/index.html
+@@ -674,10 +674,20 @@
+   const r = 6 + Math.random() * 26;
+   tc.fillStyle = Math.random() < 0.5 ? "rgba(90,120,64,0.35)" : "rgba(60,86,44,0.35)";
+   tc.beginPath(); tc.arc(x, y, r, 0, 7); tc.fill();
+ }
++// Dezente dunkelgrüne Randzone entlang der Weltgrenze (~60px breit)
++tc.strokeStyle = "rgba(24,34,16,0.55)";
++tc.lineWidth = 120;                        // 120px Strich, zentriert auf die Kante = 60px innen
++tc.strokeRect(0, 0, WORLD.w, WORLD.h);
++// Aufstellungszonen freihalten: Deko nicht in Deploy-Bereichen (Radius 200px)
++const deploys = [];
++for (const row of DEPLOY) for (const d of row) deploys.push(d);
++const clearOfDeploys = (x, y) =>
++  deploys.every(d => Math.hypot(x - d.x, y - d.y) > 200);
+ for (let i = 0; i < 46; i++) {            // Felsen
+   const x = Math.random() * WORLD.w, y = Math.random() * WORLD.h;
++  if (!clearOfDeploys(x, y)) continue;
+   tc.fillStyle = "#7c7f76";
+   tc.beginPath(); tc.arc(x, y, 4 + Math.random() * 8, 0, 7); tc.fill();
+   tc.fillStyle = "rgba(255,255,255,0.15)";
+   tc.beginPath(); tc.arc(x - 2, y - 2, 2 + Math.random() * 3, 0, 7); tc.fill();
+
+[0m
+[0m← [0mEdit index.html
+Index: /opt/data/projekte/formation-battle/index.html
+===================================================================
+--- /opt/data/projekte/formation-battle/index.html
++++ /opt/data/projekte/formation-battle/index.html
+@@ -693,8 +693,9 @@
+   tc.beginPath(); tc.arc(x - 2, y - 2, 2 + Math.random() * 3, 0, 7); tc.fill();
+ }
+ for (let i = 0; i < 24; i++) {            // Bäume (rein dekorativ)
+   const x = Math.random() * WORLD.w, y = Math.random() * WORLD.h;
++  if (!clearOfDeploys(x, y)) continue;
+   tc.fillStyle = "rgba(0,0,0,0.2)";
+   tc.beginPath(); tc.arc(x + 3, y + 4, 9, 0, 7); tc.fill();
+   tc.fillStyle = "#33512a";
+   tc.beginPath(); tc.arc(x, y, 9, 0, 7); tc.fill();
+
+[0m
+**D10 + D13** — Terrain: Randzone + Deko-Freihaltung um Deploy-Punkte:
+[0m← [0mEdit index.html
+Index: /opt/data/projekte/formation-battle/index.html
+===================================================================
+--- /opt/data/projekte/formation-battle/index.html
++++ /opt/data/projekte/formation-battle/index.html
+@@ -706,30 +706,39 @@
+ 
+ const TEAM_COLOR = ["#4f8fe0", "#d95f5f"];
+ const TEAM_DARK  = ["#2c5a94", "#8f3434"];
+ 
+-/* Einzelner Soldat: Kreis + Waffen-Silhouette, in Blickrichtung gedreht. */
++/* Einzelner Soldat: Kreis + Waffen-Silhouette, in Blickrichtung gedreht.
++   Teamfarbe bleibt KONSTANT (keine HP-Abdunklung) — der Zustand wird
++   stattdessen über den Mini-HP-Balken unter dem Soldaten gezeigt. */
+ function drawSoldier(t, s) {
+   const u = UNITS[t.type];
++
++  // Gefallener: dunkle Silhouette bleibt 2,5 s liegen (Verluste ablesbar)
++  if (!s.alive) {
++    ctx.fillStyle = "rgba(18,22,14,0.6)";
++    ctx.beginPath();
++    ctx.ellipse(s.x, s.y, u.radius + 2, (u.radius + 2) * 0.6, t.facing, 0, 7);
++    ctx.fill();
++    return;
++  }
++
+   ctx.save();
+   ctx.translate(s.x, s.y);
+   ctx.rotate(t.facing);
+ 
+   // Schatten
+   ctx.fillStyle = "rgba(0,0,0,0.25)";
+   ctx.beginPath(); ctx.ellipse(1, 2, u.radius + 1, u.radius * 0.8 + 1, 0, 0, 7); ctx.fill();
+ 
+-  // Körper (Helligkeit = verbleibende LP)
+-  const hpFrac = Math.max(0.25, s.hp / s.maxHp);
+-  ctx.fillStyle = t.team === 0
+-    ? `rgb(${Math.round(79 * hpFrac + 20)},${Math.round(143 * hpFrac + 20)},${Math.round(224 * hpFrac + 15)})`
+-    : `rgb(${Math.round(217 * hpFrac + 20)},${Math.round(95 * hpFrac + 15)},${Math.round(95 * hpFrac + 15)})`;
++  // Körper — Teamfarbe konstant
++  ctx.fillStyle = TEAM_COLOR[t.team];
+   ctx.strokeStyle = "#141810";
+   ctx.lineWidth = 1.2;
+ 
+   if (t.type === "cavalry") { // Pferd + Reiter
+     ctx.beginPath(); ctx.ellipse(0, 0, u.radius + 4, u.radius, 0, 0, 7); ctx.fill(); ctx.stroke();
+-    ctx.fillStyle = TEAM_COLOR[t.team];
++    ctx.fillStyle = TEAM_DARK[t.team];
+     ctx.beginPath(); ctx.arc(-1, 0, 3.2, 0, 7); ctx.fill();
+   } else {
+     ctx.beginPath(); ctx.arc(0, 0, u.radius, 0, 7); ctx.fill(); ctx.stroke();
+   }
+
+[0m
+**D5** — drawSoldier: konstante Teamfarbe, Mini-HP-Balken, Gefallenen-Silhouette:
+[0m← [0mEdit index.html
+Index: /opt/data/projekte/formation-battle/index.html
+===================================================================
+--- /opt/data/projekte/formation-battle/index.html
++++ /opt/data/projekte/formation-battle/index.html
+@@ -776,8 +776,17 @@
+       break;
+   }
+   ctx.stroke();
+   ctx.restore();
++
++  // Mini-HP-Balken unter dem Soldaten (nur bei Verwundung)
++  if (s.hp < s.maxHp) {
++    const frac = Math.max(0, s.hp / s.maxHp);
++    ctx.fillStyle = "rgba(0,0,0,0.55)";
++    ctx.fillRect(s.x - 5, s.y + u.radius + 3, 10, 2);
++    ctx.fillStyle = frac > 0.5 ? "#8fd98f" : (frac > 0.25 ? "#e0c35c" : "#d95f5f");
++    ctx.fillRect(s.x - 5, s.y + u.radius + 3, 10 * frac, 2);
++  }
+ }
+ 
+ function drawTroop(t) {
+   // Befehls-/Ziel-Markierungen
+
+[0m
+[0m← [0mEdit index.html
+Index: /opt/data/projekte/formation-battle/index.html
+===================================================================
+--- /opt/data/projekte/formation-battle/index.html
++++ /opt/data/projekte/formation-battle/index.html
+@@ -706,8 +706,14 @@
+ 
+ const TEAM_COLOR = ["#4f8fe0", "#d95f5f"];
+ const TEAM_DARK  = ["#2c5a94", "#8f3434"];
+ 
++/* Typ-Kürzel für Feld-Banner der KI-Truppen. */
++const TYPE_SHORT = {
++  archer: "BO", skirmisher: "PL", infantry: "IN", housecarl: "HK",
++  spearman: "SP", swordsman: "SW", cavalry: "KA",
++};
++
+ /* Einzelner Soldat: Kreis + Waffen-Silhouette, in Blickrichtung gedreht.
+    Teamfarbe bleibt KONSTANT (keine HP-Abdunklung) — der Zustand wird
+    stattdessen über den Mini-HP-Balken unter dem Soldaten gezeigt. */
+ function drawSoldier(t, s) {
+
+[0m
+[0m← [0mEdit index.html
+Index: /opt/data/projekte/formation-battle/index.html
+===================================================================
+--- /opt/data/projekte/formation-battle/index.html
++++ /opt/data/projekte/formation-battle/index.html
+@@ -794,17 +794,51 @@
+   }
+ }
+ 
+ function drawTroop(t) {
+-  // Befehls-/Ziel-Markierungen
++  // Auswahlring der gewählten Truppe (deutlich sichtbar, Teamfarbe)
+   if (t.team === 0 && G.selected !== null && G.playerTroops[G.selected] === t) {
+-    ctx.strokeStyle = "rgba(255,255,255,0.9)";
+-    ctx.lineWidth = 1.5;
++    ctx.strokeStyle = "#9fc2ff";
++    ctx.lineWidth = 2.5;
+     ctx.setLineDash([6, 5]);
+     ctx.beginPath(); ctx.arc(t.x, t.y, 66, 0, 7); ctx.stroke();
+     ctx.setLineDash([]);
+   }
+   for (const s of t.soldiers) drawSoldier(t, s);
++
++  if (!t.alive) return;
++
++  // Feld-Banner: Truppennummer (Spieler 1-5) bzw. Typ-Kürzel (KI) über dem
++  // Anker — schließt die Zuordnung Feld ↔ Sidebar-Karte; nur ab Zoom > 0.5
++  if (G.cam.zoom > 0.5 && !t.routing) {
++    const label = t.team === 0
++      ? String(G.playerTroops.indexOf(t) + 1)
++      : (TYPE_SHORT[t.type] || "?");
++    ctx.strokeStyle = "#141810";
++    ctx.lineWidth = 1.5;
++    ctx.beginPath(); ctx.moveTo(t.x, t.y - 8); ctx.lineTo(t.x, t.y - 30); ctx.stroke();
++    ctx.fillStyle = TEAM_COLOR[t.team];
++    ctx.fillRect(t.x, t.y - 30, 17, 12);
++    ctx.lineWidth = 1;
++    ctx.strokeRect(t.x, t.y - 30, 17, 12);
++    ctx.fillStyle = "#ffffff";
++    ctx.font = "bold 9px sans-serif";
++    ctx.textAlign = "center"; ctx.textBaseline = "middle";
++    ctx.fillText(label, t.x + 8.5, t.y - 24);
++  }
++
++  // Weiße Fahne: Truppe flieht (Moral gebrochen) — auf dem Feld lesbar
++  if (t.routing) {
++    ctx.strokeStyle = "#e8e4d8";
++    ctx.lineWidth = 1.5;
++    ctx.beginPath(); ctx.moveTo(t.x, t.y - 8); ctx.lineTo(t.x, t.y - 34); ctx.stroke();
++    ctx.fillStyle = "#f4f4ec";
++    ctx.beginPath();
++    ctx.moveTo(t.x, t.y - 34);
++    ctx.lineTo(t.x + 14, t.y - 30);
++    ctx.lineTo(t.x, t.y - 26);
++    ctx.closePath(); ctx.fill();
++  }
+ }
+ 
+ function render() {
+   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+[0m
+**D2 + D6 + D4 (Ring)** — drawTroop: Banner, Fluchtfahne, neuer Auswahlring:
+[0m← [0mEdit index.html
+Index: /opt/data/projekte/formation-battle/index.html
+===================================================================
+--- /opt/data/projekte/formation-battle/index.html
++++ /opt/data/projekte/formation-battle/index.html
+@@ -855,15 +855,19 @@
+   // Bewegungs-Marker (verblassende Flaggen)
+   for (const m of G.markers) {
+     ctx.globalAlpha = Math.min(1, m.life);
+     if (m.kind === "move") {
+-      ctx.strokeStyle = "#a7e0a7"; ctx.lineWidth = 2;
++      ctx.strokeStyle = "#9fc2ff"; ctx.lineWidth = 2;   // Bewegung: hellblau
+       ctx.beginPath(); ctx.arc(m.x, m.y, 8, 0, 7); ctx.stroke();
+       ctx.beginPath(); ctx.moveTo(m.x - 4, m.y + 4); ctx.lineTo(m.x + 4, m.y - 4);
+       ctx.moveTo(m.x + 4, m.y + 4); ctx.lineTo(m.x - 4, m.y - 4); ctx.stroke();
+     } else if (m.kind === "attack" && m.troop.alive) {
+-      ctx.strokeStyle = "#ff9a9a"; ctx.lineWidth = 2;
++      ctx.strokeStyle = "#ffb347"; ctx.lineWidth = 2;   // Angriff: orange (Rot bleibt Feind)
+       ctx.beginPath(); ctx.arc(m.troop.x, m.troop.y, 40, 0, 7); ctx.stroke();
++    } else if (m.kind === "hit") {
++      // Einschlag-Marker: kleiner heller Punkt beim Projektil-Treffer
++      ctx.fillStyle = "#fff2c0";
++      ctx.beginPath(); ctx.arc(m.x, m.y, 2.2, 0, 7); ctx.fill();
+     }
+     ctx.globalAlpha = 1;
+   }
+ 
+@@ -873,20 +877,32 @@
+     ctx.strokeStyle = "#ff5b5b"; ctx.lineWidth = 2.5;
+     ctx.beginPath(); ctx.arc(sel.targetTroop.x, sel.targetTroop.y, 72, 0, 7); ctx.stroke();
+   }
+ 
++  // Hover-Feedback: eigene Truppe unter dem Mauszeiger schwach umringen
++  if (G.hover && G.hover.alive) {
++    ctx.globalAlpha = 0.4;
++    ctx.strokeStyle = "#9fc2ff";
++    ctx.lineWidth = 2.5;
++    ctx.beginPath(); ctx.arc(G.hover.x, G.hover.y, 66, 0, 7); ctx.stroke();
++    ctx.globalAlpha = 1;
++  }
++
+   for (const t of G.troops) drawTroop(t);
+ 
+-  // Projektile: Pfeile kurz, Wurfspiele länger
++  // Projektile: Pfeile kurz, Wurfspiele länger — deutlich sichtbar gezeichnet
+   for (const p of G.projectiles) {
+-    const len = p.kind === "arrow" ? 9 : 13;
+-    ctx.strokeStyle = p.kind === "arrow" ? "#e9dfc0" : "#d8c9a0";
+-    ctx.lineWidth = 1.6;
++    const len = p.kind === "arrow" ? 14 : 18;
++    ctx.strokeStyle = p.kind === "arrow" ? "#f0e6c8" : "#e0d0a5";
++    ctx.lineWidth = 2.5;
+     const a = p.ang || 0;
+     ctx.beginPath();
+     ctx.moveTo(p.x, p.y);
+     ctx.lineTo(p.x - Math.cos(a) * len, p.y - Math.sin(a) * len);
+     ctx.stroke();
++    // heller Kopf-Punkt
++    ctx.fillStyle = "#fff6d8";
++    ctx.beginPath(); ctx.arc(p.x, p.y, 2, 0, 7); ctx.fill();
+   }
+ 
+   ctx.restore();
+ }
+
+[0m
+**D9 + D3 + D4** — render(): Marker-Farben, Einschlag-Marker, Hover-Ring, Projektile sichtbar:
+[0m← [0mEdit index.html
+Index: /opt/data/projekte/formation-battle/index.html
+===================================================================
+--- /opt/data/projekte/formation-battle/index.html
++++ /opt/data/projekte/formation-battle/index.html
+@@ -1214,10 +1214,11 @@
+ const alive = t.alive && G.troops.includes(t);
+ el.classList.toggle("dead", !alive);
+ el.classList.toggle("sel", G.selected === i && alive);
+ if (!alive) return;
+-const frac = t.soldiers.length / t.size;
+-el.querySelector(".count").textContent = `${t.soldiers.length}/${t.size}`;
++const living = livingCount(t); // nur Lebende zählen (Gefallene liegen ggf. noch)
++const frac = living / t.size;
++el.querySelector(".count").textContent = `${living}/${t.size}`;
+ const auto = el.querySelector(".auto");
+ auto.textContent = `Auto: ${t.autoAttack ? "AN" : "AUS"}`;
+ auto.className = "auto " + (t.autoAttack ? "on" : "off");
+ const fill = el.querySelector(".mfill");
+
+[0m
+[0m← [0mEdit index.html
+Index: /opt/data/projekte/formation-battle/index.html
+===================================================================
+--- /opt/data/projekte/formation-battle/index.html
++++ /opt/data/projekte/formation-battle/index.html
+@@ -1256,10 +1256,14 @@
+       `<button id="btnRestart">Neue Schlacht</button>`;
+     overlay.classList.add("show");
+     document.getElementById("btnRestart").addEventListener("click", init);
+   } else if (G.paused) {
+-    panel.innerHTML = `<h1 style="font-size:28px">PAUSE</h1><p style="color:#b8c6ad">P oder ESC zum Fortsetzen</p>`;
++    panel.innerHTML =
++      `<h1 style="font-size:28px">PAUSE</h1>` +
++      `<p style="color:#b8c6ad">P oder ESC zum Fortsetzen</p>` +
++      `<button id="btnPauseRestart" style="margin-top:14px">Schlacht neu starten</button>`;
+     overlay.classList.add("show");
++    document.getElementById("btnPauseRestart").addEventListener("click", init);
+   } else {
+     overlay.classList.remove("show");
+   }
+ }
+
+[0m
+[0m← [0mEdit index.html
+Index: /opt/data/projekte/formation-battle/index.html
+===================================================================
+--- /opt/data/projekte/formation-battle/index.html
++++ /opt/data/projekte/formation-battle/index.html
+@@ -1270,8 +1270,9 @@
+ 
+ /* ---------------- Start & Hauptschleife ---------------- */
+ 
+ function init() {
++  clearTimeout(G.endTimer); // hängenden Ergebnis-Timer abbrechen
+   G.troops = [];
+   G.projectiles = [];
+   G.markers = [];
+   G.simTime = 0;
+
+[0m
+[0m← [0mEdit index.html
+Index: /opt/data/projekte/formation-battle/index.html
+===================================================================
+--- /opt/data/projekte/formation-battle/index.html
++++ /opt/data/projekte/formation-battle/index.html
+@@ -1282,9 +1282,9 @@
+ G.paused = false;
+ G.over = false;
+ G.result = null;
+ G.aiTimer = 0;
+-G.cam = { x: WORLD.w / 2, y: WORLD.h / 2, zoom: 0.72 };
++G.cam = { x: 560, y: 850, zoom: 0.9 }; // Startkamera auf die eigene Armee
+ nextTroopId = 1;
+ 
+ for (let team = 0; team < 2; team++) {
+   for (const d of DEPLOY[team]) {
+
+[0m
+**D7 (Sidebar-Zählung), D12, D1** — updateSidebar mit livingCount, Pause-Restart-Button, Startkamera + endTimer-Clear:
+[0m# [0mTodos
+[✓] index.html vollständig lesen
+[✓] F1-F8 Funktion-Fixes
+[✓] D1-D14 Design/Security-Fixes
+[•] Validierung: node --check, grep-Selbsttest, Änderungsliste
+[0m
+[0m$ [0mawk '/^<script>$/{f=1;next} /^<\/script>$/{f=0} f' index.html > /opt/data/cache/scratch/opencode/fb-check.js && node --check /opt/data/cache/scratch/opencode/fb-check.js && echo "SYNTAX OK ($(wc -l < /opt/data/cache/scratch/opencode/fb-check.js) Zeilen JS)"
+SYNTAX OK (1194 Zeilen JS)
+[0m
+**Validierung (1)** — JS extrahieren und Syntax prüfen:
+[0m$ [0mnode -e '
+const fs = require("fs");
+const src = fs.readFileSync("index.html", "utf8");
+const js = src.slice(src.indexOf("<script>")+9, src.lastIndexOf("</script>"));
+const results = [];
+const check = (name, ok) => results.push((ok?"PASS":"FAIL") + "  " + name);
+
+// F1: exakte Alive-Checks
+check("F1a updateCombat: \x27if (!v.alive) continue;\x27", /for \(const v of f\.soldiers\) \{\n\s+if \(!v\.alive\) continue;/m.test(js));
+check("F1b updateProjectiles: \x27if (!s.alive) continue;\x27", /for \(const s of t\.soldiers\) \{\n\s+if \(!s\.alive\) continue;/m.test(js));
+
+// Reihenfolge-Check: F1a in updateCombat (nach Funktionsstart), F1b in updateProjectiles
+const uc = js.slice(js.indexOf("function updateCombat"));
+const up = js.slice(js.indexOf("function updateProjectiles"), js.indexOf("function soldierGap"));
+check("F1a liegt in updateCombat", uc.includes("if (!v.alive) continue;") && uc.indexOf("if (!v.alive) continue;") < uc.indexOf("if (best)"));
+check("F1b liegt in updateProjectiles", up.includes("if (!s.alive) continue;"));
+
+// F2
+check("F2 dest=null bei Punkt-Ankunft", js.includes("} else if (!wantMove.soldiers) {") && js.includes("t.dest = null;"));
+// F3
+check("F3 Housecarl \x27atk === \x22housecarl\x22 && !isRanged\x27", js.includes(`if (atk === "housecarl" && !isRanged) return 1.3;`));
+// F4
+check("F4 mousedown G.paused return", /canvas\.addEventListener\("mousedown", \(e\) => \{\s*\n\s*if \(G\.over\) return;\s*\n\s*if \(G\.paused\) return;/.test(js));
+// F5
+check("F5 Karten-Klick nur lebend", js.includes("e.button === 0 && G.playerTroops[i].alive"));
+// F6
+check("F6 Rally-Move-Marker", /rallyTroop\(t, clamp[\s\S]{0,120}kind: "move"/.test(js));
+// F7
+check("F7 endTimer gesetzt + gecleart", js.includes("G.endTimer = setTimeout(updateOverlay, 900);") && js.includes("clearTimeout(G.endTimer);"));
+// F8
+check("F8 Kommentare (Ansturm/Burst)", js.includes("jeder bewegte Kontakt zählt als Ansturm") && js.includes("TRUPPENWEIT"));
+// D1
+check("D1 Startkamera {560,850,0.9}", js.includes("G.cam = { x: 560, y: 850, zoom: 0.9 };"));
+// D2
+check("D2 Feld-Banner (zoom>0.5, TYPE_SHORT)", js.includes("G.cam.zoom > 0.5 && !t.routing") && js.includes("TYPE_SHORT"));
+// D3
+check("D3 Projektile 2.5px/14/18 + Kopf + hit-Marker", js.includes("ctx.lineWidth = 2.5;") && js.includes(`p.kind === "arrow" ? 14 : 18`) && js.includes(`kind: "hit"`));
+// D4
+check("D4 Auswahlring #9fc2ff 2.5 + G.hover", js.includes(`ctx.strokeStyle = "#9fc2ff";`) && /G\.hover = troopAt\(/.test(js) && js.includes("G.hover = null"));
+// D5
+check("D5 Teamfarbe konstant + HP-Balken", !js.includes("hpFrac") && js.includes("Mini-HP-Balken"));
+// D6
+check("D6 weiße Fluchtfahne", js.includes("if (t.routing) {") && js.includes("Weiße Fahne"));
+// D7
+check("D7 deadAt + 2.5s-Cleanup + livingCount", js.includes("s.deadAt = G.simTime") && js.includes("G.simTime - 2.5") && js.includes("function livingCount") && js.includes("living / t.size"));
+// D8
+check("D8 #hint umbrechbar + Media-Query", /white-space: normal/.test(src) && src.includes("@media (max-width: 1100px)"));
+// D9
+check("D9 Marker #9fc2ff / #ffb347", js.includes("#9fc2ff\"; ctx.lineWidth = 2;") && js.includes("#ffb347"));
+// D10
+check("D10 Randzone 60px", js.includes("tc.strokeRect(0, 0, WORLD.w, WORLD.h);"));
+// D11
+check("D11 .state 12px #c4d2b4", src.includes(".card .state { font-size: 12px; color: #c4d2b4; }"));
+// D12
+check("D12 Pause-Restart-Button", js.includes("btnPauseRestart"));
+// D13
+check("D13 Deko >200px von Deploy", js.includes("clearOfDeploys"));
+// D14
+check("D14 CSP-Meta", src.includes('http-equiv="Content-Security-Policy"'));
+
+const fails = results.filter(r => r.startsWith("FAIL"));
+console.log(results.join("\n"));
+console.log(fails.length ? "\n===> " + fails.length + " FEHLER" : "\n===> ALLE " + results.length + " CHECKS BESTANDEN");
+process.exit(fails.length ? 1 : 0);
+'
+[eval]:59
+check("D14 CSP-Meta", src.includes(http-equiv=Content-Security-Policy));
+                                   ^^^^^^^^^^
+Expected ',', got '='
+
+SyntaxError: Invalid left-hand side in assignment
+    at makeContextifyScript (node:internal/vm:194:14)
+    at compileScript (node:internal/process/execution:420:10)
+    at evalTypeScript (node:internal/process/execution:292:22)
+    at node:internal/main/eval_string:71:3
+
+Node.js v26.7.0
+[0m
+**Validierung (2)** — Selbsttest per Node (F1-Strings an den richtigen Stellen, Rest-Fixes):
+[0m← [0mWrite /opt/data/cache/scratch/opencode/fb-selftest.js
+Wrote file successfully.
+[0m
+Quoting-Problem — Testscript als Datei ausführen:
+[0m$ [0mnode /opt/data/cache/scratch/opencode/fb-selftest.js
+PASS  F1a updateCombat: 'if (!v.alive) continue;'
+PASS  F1b updateProjectiles: 'if (!s.alive) continue;'
+PASS  F1a liegt in updateCombat
+PASS  F1b liegt in updateProjectiles
+PASS  F2 dest=null bei Punkt-Ankunft
+PASS  F3 Housecarl-Bedingung
+PASS  F4 mousedown G.paused return
+PASS  F5 Karten-Klick nur lebend
+PASS  F6 Rally-Move-Marker
+PASS  F7 endTimer gesetzt + gecleart
+PASS  F8 Kommentare (Ansturm/Burst)
+PASS  D1 Startkamera {560,850,0.9}
+PASS  D2 Feld-Banner (zoom>0.5, TYPE_SHORT)
+PASS  D3 Projektile 2.5px/14/18 + Kopf + hit-Marker
+PASS  D4 Auswahlring #9fc2ff 2.5 + G.hover
+PASS  D5 Teamfarbe konstant + HP-Balken
+PASS  D6 weiße Fluchtfahne
+FAIL  D7 deadAt + 2.5s-Cleanup + livingCount
+PASS  D8 #hint umbrechbar + Media-Query
+PASS  D9 Marker #9fc2ff / #ffb347
+PASS  D10 Randzone
+PASS  D11 .state 12px #c4d2b4
+PASS  D12 Pause-Restart-Button
+PASS  D13 Deko >200px von Deploy
+PASS  D14 CSP-Meta
+
+===> 1 FEHLER
+[0m
+[0m$ [0mgrep -n "deadAt" index.html | head -20
+344:  victim.deadAt = G.simTime; // Gefallener bleibt 2,5 s als Silhouette liegen
+1121:      t.soldiers = t.soldiers.filter(s => s.alive || s.deadAt > expire);
+[0m
+[0m$ [0mgrep -n "G.simTime - 2.5\|function livingCount\|living / t.size" index.html
+1108:function livingCount(t) {
+1117:  const expire = G.simTime - 2.5;
+1219:    const frac = living / t.size;
+[0m
+[0m$ [0mnode -e '
+const src = require("fs").readFileSync("index.html","utf8");
+const js = src.slice(src.indexOf("<script>")+9, src.lastIndexOf("</script>"));
+console.log("victim.deadAt:", js.includes("victim.deadAt = G.simTime"));
+console.log("s.deadAt search:", js.includes("s.deadAt = G.simTime"));
+console.log("expire:", js.includes("G.simTime - 2.5"));
+console.log("livingCount:", js.includes("function livingCount"));
+console.log("frac:", js.includes("living / t.size"));'
+victim.deadAt: true
+s.deadAt search: false
+expire: true
+livingCount: true
+frac: true
+[0m
+Der Fix ist korrekt — mein Teststring war falsch (in `applyDamage` heißt der Parameter `victim`, nicht `s`). Test korrigieren:
+[0m← [0mEdit /opt/data/cache/scratch/opencode/fb-selftest.js
+Index: /opt/data/cache/scratch/opencode/fb-selftest.js
+===================================================================
+--- /opt/data/cache/scratch/opencode/fb-selftest.js
++++ /opt/data/cache/scratch/opencode/fb-selftest.js
+@@ -24,9 +24,9 @@
+ check("D3 Projektile 2.5px/14/18 + Kopf + hit-Marker", js.includes('p.kind === "arrow" ? 14 : 18') && js.includes('kind: "hit"'));
+ check("D4 Auswahlring #9fc2ff 2.5 + G.hover", /G\.hover = troopAt\(/.test(js) && js.includes("G.hover = null") && js.includes("globalAlpha = 0.4"));
+ check("D5 Teamfarbe konstant + HP-Balken", !js.includes("hpFrac") && js.includes("Mini-HP-Balken"));
+ check("D6 weiße Fluchtfahne", js.includes("Weiße Fahne"));
+-check("D7 deadAt + 2.5s-Cleanup + livingCount", js.includes("s.deadAt = G.simTime") && js.includes("G.simTime - 2.5") && js.includes("function livingCount") && js.includes("living / t.size"));
++check("D7 deadAt + 2.5s-Cleanup + livingCount", js.includes("victim.deadAt = G.simTime") && js.includes("G.simTime - 2.5") && js.includes("function livingCount") && js.includes("living / t.size"));
+ check("D8 #hint umbrechbar + Media-Query", src.includes("white-space: normal") && src.includes("@media (max-width: 1100px)"));
+ check("D9 Marker #9fc2ff / #ffb347", js.includes('#ffb347'));
+ check("D10 Randzone", js.includes("tc.strokeRect(0, 0, WORLD.w, WORLD.h);"));
+ check("D11 .state 12px #c4d2b4", src.includes(".card .state { font-size: 12px; color: #c4d2b4; }"));
+
+[0m
+[0m$ [0mnode /opt/data/cache/scratch/opencode/fb-selftest.js && awk '/^<script>$/{f=1;next} /^<\/script>$/{f=0} f' index.html > /opt/data/cache/scratch/opencode/fb-check.js && node --check /opt/data/cache/scratch/opencode/fb-check.js && echo "FINAL: node --check OK"
+PASS  F1a updateCombat: 'if (!v.alive) continue;'
+PASS  F1b updateProjectiles: 'if (!s.alive) continue;'
+PASS  F1a liegt in updateCombat
+PASS  F1b liegt in updateProjectiles
+PASS  F2 dest=null bei Punkt-Ankunft
+PASS  F3 Housecarl-Bedingung
+PASS  F4 mousedown G.paused return
+PASS  F5 Karten-Klick nur lebend
+PASS  F6 Rally-Move-Marker
+PASS  F7 endTimer gesetzt + gecleart
+PASS  F8 Kommentare (Ansturm/Burst)
+PASS  D1 Startkamera {560,850,0.9}
+PASS  D2 Feld-Banner (zoom>0.5, TYPE_SHORT)
+PASS  D3 Projektile 2.5px/14/18 + Kopf + hit-Marker
+PASS  D4 Auswahlring #9fc2ff 2.5 + G.hover
+PASS  D5 Teamfarbe konstant + HP-Balken
+PASS  D6 weiße Fluchtfahne
+PASS  D7 deadAt + 2.5s-Cleanup + livingCount
+PASS  D8 #hint umbrechbar + Media-Query
+PASS  D9 Marker #9fc2ff / #ffb347
+PASS  D10 Randzone
+PASS  D11 .state 12px #c4d2b4
+PASS  D12 Pause-Restart-Button
+PASS  D13 Deko >200px von Deploy
+PASS  D14 CSP-Meta
+
+===> ALLE 25 CHECKS BESTANDEN
+FINAL: node --check OK
+[0m
+[0m$ [0mgrep -n "Content-Security-Policy\|white-space: normal\|@media (max-width\|\.card \.state {\|jeder bewegte Kontakt\|housecarl\" && !isRanged\|TRUPPENWEIT\|victim.deadAt\|kind: \"hit\"\|if (!a.alive) continue\|if (!b.alive) continue\|if (!v.alive) continue\|if (!s.alive) continue\|wantMove.soldiers) {\|hover: null\|endTimer\|clearOfDeploys\|tc.strokeRect\|TYPE_SHORT\|Gefallener: dunkle\|Teamfarbe konstant\|Mini-HP-Balken\|Auswahlring der gewählten\|Feld-Banner\|Weiße Fahne\|Bewegung: hellblau\|Angriff: orange\|Einschlag-Marker\|Hover-Feedback: eigene\|hover = troopAt\|G.hover = null\|mouseleav\|Punkt-Ziel erreicht\|Angriffsziel verfolgen\|function livingCount\|const expire\|kein LEBENDER\|hasCorpses\|team === 0 && t.alive\|team === 1 && t.alive\|G.endTimer = setTimeout\|G.playerTroops\[i\].alive\|btnPauseRestart\|const living\|clearTimeout(G.endTimer)\|x: 560\|if (G.paused) return\|Rückruf (Move-Marker)" index.html
+32:<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:">
+65:  .card .state { font-size: 12px; color: #c4d2b4; }
+85:    white-space: normal; line-height: 1.5;
+87:  @media (max-width: 1100px) { #hint { font-size: 11px; } }
+88:  @media (max-width: 800px)  { #hint { font-size: 10px; padding: 4px 6px; } }
+143:const CHARGE_SPEED    = 95;            // Ansturm-Schwelle: bewusst UNTER dem Kavallerie-Tempo (135) — jeder bewegte Kontakt zählt als Ansturm (gewusst so, begrenzt über chargeReady)
+180:  if (atk === "housecarl" && !isRanged) return 1.3; // Rüstungsbonus: Nahkampf gegen ALLE Verteidiger (SPEC: "alles Nahkampf"), auch Schützen im Nahkampf
+227:  hover: null,       // eigene Truppe unter dem Mauszeiger (Hover-Feedback)
+230:  endTimer: null,    // setTimeout-Handle des Ergebnis-Overlays (init cleart)
+256:    burstLeft: type === "skirmisher" ? 3 : 0, // Skirmisher-Burst: TRUPPENWEIT — die ersten 3 Projektile der ganzen Truppe sind x1.5 (nicht pro Soldat)
+344:  victim.deadAt = G.simTime; // Gefallener bleibt 2,5 s als Silhouette liegen
+414:          if (!s.alive) continue; // Gefallene sind kein gültiges Ziel mehr
+424:        G.markers.push({ kind: "hit", x: best.s.x, y: best.s.y, life: 0.3 });
+440:    if (!a.alive) continue;
+442:      if (!b.alive) continue;
+558:      if (!s.alive) continue;
+572:  if (G.paused) return; // Pause: keine Auswahl/Befehle/Marker (konsistent zum Overlay)
+592:    // Hover-Feedback: eigene Truppe unter dem Mauszeiger vormerken
+594:    G.hover = troopAt(w.x, w.y, 0);
+599:  G.hover = null; // Hover aufräumen
+601:canvas.addEventListener("mouseleave", () => { G.hover = null; });
+612:    // Feedback für den Rückruf (Move-Marker)
+648:    if (G.playerTroops[i] && G.playerTroops[i].alive) G.selected = i;
+681:  tc.strokeRect(0, 0, WORLD.w, WORLD.h);
+685:  const clearOfDeploys = (x, y) =>
+689:    if (!clearOfDeploys(x, y)) continue;
+697:    if (!clearOfDeploys(x, y)) continue;
+710:/* Typ-Kürzel für Feld-Banner der KI-Truppen. */
+711:const TYPE_SHORT = {
+718:   stattdessen über den Mini-HP-Balken unter dem Soldaten gezeigt. */
+722:  // Gefallener: dunkle Silhouette bleibt 2,5 s liegen (Verluste ablesbar)
+739:  // Körper — Teamfarbe konstant
+787:  // Mini-HP-Balken unter dem Soldaten (nur bei Verwundung)
+798:  // Auswahlring der gewählten Truppe (deutlich sichtbar, Teamfarbe)
+810:  // Feld-Banner: Truppennummer (Spieler 1-5) bzw. Typ-Kürzel (KI) über dem
+815:      : (TYPE_SHORT[t.type] || "?");
+829:  // Weiße Fahne: Truppe flieht (Moral gebrochen) — auf dem Feld lesbar
+859:      ctx.strokeStyle = "#9fc2ff"; ctx.lineWidth = 2;   // Bewegung: hellblau
+864:      ctx.strokeStyle = "#ffb347"; ctx.lineWidth = 2;   // Angriff: orange (Rot bleibt Feind)
+867:      // Einschlag-Marker: kleiner heller Punkt beim Projektil-Treffer
+881:  // Hover-Feedback: eigene Truppe unter dem Mauszeiger schwach umringen
+919:  // Angriffsziel verfolgen: Ziel teilweise tot → abwählen
+972:    if (wantMove.soldiers) {
+974:      for (const v of wantMove.soldiers) {
+975:        if (!v.alive) continue;
+987:    } else if (!wantMove.soldiers) {
+988:      // Punkt-Ziel erreicht: dest freigeben, damit Auto-Angriff wieder
+1016:    if (!s.alive) continue; // Gefallene bleiben liegen, rücken nicht nach
+1026:    if (!s.alive) continue;
+1030:        if (!v.alive) continue;
+1062:          if (!v.alive) continue; // Gefallene sind kein gültiges Ziel mehr
+1086:              if (!v.alive) continue;
+1096:            if (!v.alive) continue;
+1108:function livingCount(t) {
+1117:  const expire = G.simTime - 2.5;
+1126:    // Vernichtet = kein LEBENDER Soldat mehr (Leichen dürfen noch liegen);
+1134:    const hasCorpses = t.soldiers.some(s => !s.alive);
+1135:    if (!t.alive && !hasCorpses) G.troops.splice(i, 1);
+1151:    for (const t of G.troops) if (t.team === 1 && t.alive) aiThink(t);
+1164:  const pl = G.troops.some(t => t.team === 0 && t.alive);
+1165:  const ai = G.troops.some(t => t.team === 1 && t.alive);
+1169:  G.endTimer = setTimeout(updateOverlay, 900);
+1196:      if (e.button === 0 && G.playerTroops[i].alive) { G.selected = i; e.stopPropagation(); }
+1218:    const living = livingCount(t); // nur Lebende zählen (Gefallene liegen ggf. noch)
+1263:      `<button id="btnPauseRestart" style="margin-top:14px">Schlacht neu starten</button>`;
+1265:    document.getElementById("btnPauseRestart").addEventListener("click", init);
+1274:  clearTimeout(G.endTimer); // hängenden Ergebnis-Timer abbrechen
+1286:  G.cam = { x: 560, y: 850, zoom: 0.9 }; // Startkamera auf die eigene Armee
+[0m
+**Validierung (3)** — Änderungsliste mit Zeilenbereichen:
+[0m# [0mTodos
+[✓] index.html vollständig lesen
+[✓] F1-F8 Funktion-Fixes
+[✓] D1-D14 Design/Security-Fixes
+[✓] Validierung: node --check, grep-Selbsttest, Änderungsliste
+[0m
+FIX-LAUF abgeschlossen. Alle 22 Punkte (F1–F8, D1–D14) in `index.html` umgesetzt, keine neuen Abhängigkeiten, UI deutsch.
+
+## Validierung
+
+1. **JS extrahiert + `node --check`: OK** (1194 Zeilen JS, 0 Syntaxfehler)
+2. **Grep-Selbsttest: BESTANDEN** — `if (!v.alive) continue;` in `updateCombat` (Z. 1062) und `if (!s.alive) continue;` in `updateProjectiles` (Z. 414); zusätzlich 25/25 automatische Checks für alle übrigen Fixes bestanden.
+3. **Geänderte Stellen** (Zeilenbereiche in der neuen Datei, 1291 Zeilen):
+
+| Fix | Stelle | Änderung |
+|---|---|---|
+| D14 | 32 | CSP-Meta-Tag im head |
+| D11 | 65 | `.state` 12px / `#c4d2b4` |
+| D8 | 79–88 | `#hint` flex-wrap + `white-space: normal` + Media-Queries |
+| F8 | 143, 256 | Kommentare: Ansturm-Schwelle bewusst < Tempo 135; Burst truppenweit |
+| F3 | 180 | Housecarl-Bonus `!isRanged` (SPEC: gegen ALLE Nahkampf-Verteidiger) |
+| D4 | 227 | `G.hover` im G-Literal |
+| F7 | 230 | `endTimer: null` im G-Literal |
+| D7 | 344 | `applyDamage`: `victim.deadAt = G.simTime` |
+| F1 | 414, 1062 | Alive-Checks updateProjectiles / updateCombat |
+| D3 | 424 | Einschlag-Marker (`kind:"hit"`, life 0.3) |
+| D7 | 440–442 | `soldierGap` überspringt Gefallene |
+| D4 | 558 | `troopAt` überspringt tote Truppen/Soldaten |
+| F4 | 572 | `if (G.paused) return;` im mousedown |
+| D4 | 590–601 | mousemove setzt `G.hover`; mouseup/mouseleave räumen auf |
+| F6 | 612–613 | Rally erhält Move-Marker |
+| D7 | 648 | Tasten 1–5 nur lebend (war schon ok, verifiziert) |
+| D10 | 678–682 | dunkelgrüne Randzone 60px (`strokeRect`, lineWidth 120) |
+| D13 | 684–697 | Felsen/Bäume nur > 200px von allen Deploy-Punkten |
+| D2 | 710–715, 810–827 | `TYPE_SHORT`-Karte + Feld-Banner (Nummer/Kürzel, nur zoom > 0.5) |
+| D5 | 716–795 | Teamfarbe konstant, Gefallenen-Silhouette, Mini-HP-Balken (2×10px) |
+| D4/D2/D6 | 797–840 | Auswahlring `#9fc2ff` 2.5px; Banner; weiße Fluchtfahne |
+| D9/D3/D4 | 856–895 | Marker hellblau/orange, hit-Punkt, Hover-Ring (alpha 0.4), Projektile 2.5px/14/18 + heller Kopf |
+| D7 | 919, 975, 987–991, 1016, 1026–1030 | `livingCount`-Check für Zielauswahl; Leichen rücken nicht nach, blocken keine Separation |
+| F2 | 987–991 | `t.dest = null` bei Punkt-Ankunft (d ≤ 6, kein Truppen-Ziel) |
+| F1+ | 1062, 1086, 1096 | Alive-Checks in allen updateCombat-Zielsuchen (Nah-/Fernkampf) |
+| D7 | 1107–1137 | `livingCount()` + cleanup: Leichen 2,5 s, Truppentod bei 0 Lebenden, Leichen bleiben liegen, Flucht-Zählung mit `t.alive`-Guard |
+| F7 | 1164–1169 | `checkVictory` zählt nur `t.alive`; `G.endTimer = setTimeout(...)` |
+| F5 | 1196 | Sidebar-Klick nur bei `G.playerTroops[i].alive` |
+| D7 | 1218–1220 | Sidebar zählt nur lebende Soldaten |
+| D12 | 1257–1265 | Pause-Overlay mit „Schlacht neu starten"-Button (init-Verkabelung) |
+| F7/D1 | 1274, 1286 | `clearTimeout(G.endTimer)`; Startkamera `{x:560, y:850, zoom:0.9}` |
+
+Hinweis zu D7: Der Truppentod greift weiterhin, sobald kein lebender Soldat mehr übrig ist — die Truppe bleibt mit ihren Leichen maximal 2,5 s im Array (für die Silhouetten), wird aber überall (Sieg, KI, Auswahl, Status) dank `alive`/`livingCount` wie tot behandelt. Werte für Counter, Moral, Einheiten, DEPLOY und der fixe Timestep sind unverändert.
