@@ -421,7 +421,7 @@ function updateProjectiles(dt) {
         applyDamage(best.t, best.s, p.dmg * form * rand15(),
                     p.atkTroop.x, p.atkTroop.y, false);
         // Einschlag-Feedback: kleiner heller Punkt am Treffer
-        G.markers.push({ kind: "hit", x: best.s.x, y: best.s.y, life: 0.3 });
+        G.markers.push({ kind: "hit", x: best.s.x, y: best.s.y, life: 0.3, life0: 0.3 });
       }
       continue; // Projektil entfernen (kein wachsendes Array)
     }
@@ -610,18 +610,18 @@ function issueOrder(sx, sy) {
   if (t.routing) {           // fliehende Truppe zurückrufen
     rallyTroop(t, clamp(w.x, 40, WORLD.w - 40), clamp(w.y, 40, WORLD.h - 40));
     // Feedback für den Rückruf (Move-Marker)
-    G.markers.push({ kind: "move", x: t.dest.x, y: t.dest.y, life: 1.2 });
+    G.markers.push({ kind: "move", x: t.dest.x, y: t.dest.y, life: 1.2, life0: 1.2 });
     return;
   }
   const foe = troopAt(w.x, w.y, 1 - t.team);
   if (foe) {
     t.targetTroop = foe;     // Angriffsbefehl
     t.dest = { x: foe.x, y: foe.y };
-    G.markers.push({ kind: "attack", troop: foe, life: 1.2 });
+    G.markers.push({ kind: "attack", troop: foe, life: 1.2, life0: 1.2 });
   } else {
     t.targetTroop = null;    // reiner Bewegungsbefehl
     t.dest = { x: clamp(w.x, 30, WORLD.w - 30), y: clamp(w.y, 30, WORLD.h - 30) };
-    G.markers.push({ kind: "move", x: t.dest.x, y: t.dest.y, life: 1.2 });
+    G.markers.push({ kind: "move", x: t.dest.x, y: t.dest.y, life: 1.2, life0: 1.2 });
   }
 }
 
@@ -640,10 +640,10 @@ window.addEventListener("keydown", (e) => {
   if (k === "escape" || k === "p") {         // Pause
     if (!G.over) G.paused = !G.paused;
     updateOverlay();
-  } else if (k === "q") {                    // Auto-Angriff togglen
+  } else if (k === "q" && !G.paused) {       // Auto-Angriff togglen
     const t = selectedTroop();
     if (t) t.autoAttack = !t.autoAttack;
-  } else if (k >= "1" && k <= "5") {         // Schnellauswahl 1-5
+  } else if (k >= "1" && k <= "5" && !G.paused) { // Schnellauswahl 1-5
     const i = parseInt(k, 10) - 1;
     if (G.playerTroops[i] && G.playerTroops[i].alive) G.selected = i;
   }
@@ -854,7 +854,7 @@ function render() {
 
   // Bewegungs-Marker (verblassende Flaggen)
   for (const m of G.markers) {
-    ctx.globalAlpha = Math.min(1, m.life);
+    ctx.globalAlpha = Math.min(1, m.life / m.life0);
     if (m.kind === "move") {
       ctx.strokeStyle = "#9fc2ff"; ctx.lineWidth = 2;   // Bewegung: hellblau
       ctx.beginPath(); ctx.arc(m.x, m.y, 8, 0, 7); ctx.stroke();
@@ -1279,6 +1279,7 @@ function init() {
   G.losses = { 0: 0, 1: 0 };
   G.fled = { 0: 0, 1: 0 };
   G.selected = 0;
+  G.hover = null;
   G.paused = false;
   G.over = false;
   G.result = null;
