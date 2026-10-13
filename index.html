@@ -22,21 +22,27 @@
                Kavallerie-Ansturm, Flanken-/Rückenschaden
     AI       — Verhalten der 5 KI-Truppen (keine Cheats)
     INPUT    — Maus + Tastatur (Auswahl, Befehle, Kamera, Pause)
+    INPUT-TOUCH — Touch-Steuerung über Pointer-Events (Tap-vs-Drag,
+                Pinch-Zoom, responsive Sidebar) — Maus-Logik unangetastet
     RENDER   — Terrain, Truppen, Projektile, Marker (Canvas 2D)
     MAIN     — Fixed-Timestep-Simulation (60 FPS), UI-Update, Spielende
   ============================================================================
 -->
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:">
 <title>Formation Battle</title>
 <style>
   /* ======================= UI / LAYOUT ======================= */
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { width: 100%; height: 100%; overflow: hidden; background: #1a2416; }
-  body { font-family: "Segoe UI", Arial, sans-serif; user-select: none; }
-  #game { display: block; width: 100vw; height: 100vh; cursor: crosshair; }
+  body { font-family: "Segoe UI", Arial, sans-serif; user-select: none;
+         -webkit-user-select: none; -webkit-touch-callout: none; }
+  /* Touch: kein Browser-Pan/Zoom-Gesture auf dem Spielfeld (Pointer-Events
+     steuern Kamera selbst); safe-area für Notch-Geräte respektieren */
+  #game { display: block; width: 100vw; height: 100vh; cursor: crosshair;
+          touch-action: none; }
 
   /* Linke Truppen-Leiste */
   #sidebar {
@@ -87,6 +93,37 @@
   @media (max-width: 1100px) { #hint { font-size: 11px; } }
   @media (max-width: 800px)  { #hint { font-size: 10px; padding: 4px 6px; } }
 
+  /* ======================= MOBILE / TOUCH =======================
+     Kollabiert bei max-width: 820px ODER grober Zeiger (Touch-Gerät):
+     Sidebar wird zur horizontalen Kartenleiste unten, alle Karten ≥44px
+     hoch und tappbar. Desktop-Layout bleibt unangetastet. */
+  #touchHint { display: none; }
+
+  @media (max-width: 820px), (pointer: coarse) {
+    /* Sidebar: unten, horizontal scrollbar, 44px-Mindestzielhöhe */
+    #sidebar {
+      left: 0; right: 0; top: auto; bottom: 0; width: auto;
+      flex-direction: row; gap: 4px;
+      padding: 4px 4px calc(4px + env(safe-area-inset-bottom));
+      overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch;
+    }
+    .card { flex: 0 0 auto; min-height: 48px; min-width: 96px; }
+    .card .icon { width: 24px; height: 24px; flex: 0 0 24px; }
+    .card .cname { font-size: 11px; }
+    .card .crow, .card .state { font-size: 10px; }
+    .card .mbar { height: 4px; margin: 2px 0 1px; }
+
+    /* Hinweiszeilen: Maus-Text ausblenden, TOUCH-Text einblenden */
+    #hint .mouseHint { display: none; }
+    #hint .touchHint { display: inline; }
+    #hint { bottom: auto; top: 0; border-top: none; border-bottom: 1px solid #3d4a35; }
+    #topbar { top: 0; }
+
+    /* Overlay-Panel kompakt (Portrait-Höhe) */
+    #panel { min-width: 0; max-width: 88vw; padding: 18px 22px; }
+    #panel h1 { font-size: 26px; }
+  }
+
   /* Overlay: Pause / Sieg / Niederlage */
   #overlay {
     position: fixed; inset: 0; z-index: 10; display: none;
@@ -124,9 +161,15 @@
 <div id="sidebar"></div>
 
 <div id="hint">
-  Linksklick: Truppe w&auml;hlen &nbsp;&middot;&nbsp; Rechtsklick: Bewegungs-/Angriffsbefehl
-  &nbsp;&middot;&nbsp; Mausrad: Zoom &nbsp;&middot;&nbsp; Mittelklick+Ziehen: Kamera
-  &nbsp;&middot;&nbsp; Q: Auto-Angriff &nbsp;&middot;&nbsp; 1&ndash;5: Truppe &nbsp;&middot;&nbsp; P/ESC: Pause
+  <span class="mouseHint">
+    Linksklick: Truppe w&auml;hlen &nbsp;&middot;&nbsp; Rechtsklick: Bewegungs-/Angriffsbefehl
+    &nbsp;&middot;&nbsp; Mausrad: Zoom &nbsp;&middot;&nbsp; Mittelklick+Ziehen: Kamera
+    &nbsp;&middot;&nbsp; Q: Auto-Angriff &nbsp;&middot;&nbsp; 1&ndash;5: Truppe &nbsp;&middot;&nbsp; P/ESC: Pause
+  </span>
+  <span class="touchHint">
+    Tippen: w&auml;hlen &nbsp;&middot;&nbsp; Tippen auf Feind: Angriff &nbsp;&middot;&nbsp;
+    Ziehen: Kamera &nbsp;&middot;&nbsp; Pinch: Zoom
+  </span>
 </div>
 
 <div id="overlay"><div id="panel"></div></div>
@@ -527,12 +570,14 @@ const ctx = canvas.getContext("2d");
 let dpr = 1, vw = 0, vh = 0;
 
 function resize() {
-  dpr = window.devicePixelRatio || 1;
+  // DPR-Cap 2 (SPEC-mobile): höhere Pixeldichten bräuchten 4x Fillrate
+  dpr = Math.min(2, window.devicePixelRatio || 1);
   vw = window.innerWidth; vh = window.innerHeight;
   canvas.width = Math.round(vw * dpr);
   canvas.height = Math.round(vh * dpr);
 }
 window.addEventListener("resize", resize);
+window.addEventListener("orientationchange", resize);
 
 function screenToWorld(sx, sy) {
   return {
@@ -548,9 +593,13 @@ function clampCam() {
 }
 const clamp = (v, lo, hi) => v < lo ? lo : (v > hi ? hi : v);
 
-/* Truppe an Weltpunkt finden (Soldat nah genug oder Anker). */
-function troopAt(wx, wy, team) {
-  let best = null, bestD = 30;
+/* Truppe an Weltpunkt finden (Soldat nah genug oder Anker).
+   touch: bei Pointer-Typ touch größere Toleranz, damit das 44-px-
+   Finger-Äquivalent (SPEC-mobile) ein sicheres Ziel hat. */
+function troopAt(wx, wy, team, touch) {
+  let bestD = touch ? 46 : 30;   // vergrößerte Auswahl-Toleranz bei Touch
+  const anchorPad = touch ? 26 : 20;
+  let best = null;
   for (const t of G.troops) {
     if (!t.alive) continue;
     if (team !== undefined && t.team !== team) continue;
@@ -560,14 +609,22 @@ function troopAt(wx, wy, team) {
       if (d < bestD) { bestD = d; best = t; }
     }
     const da = Math.hypot(t.x - wx, t.y - wy);
-    if (da < 55 && da < bestD + 20) { bestD = da; best = t; }
+    if (da < 55 && da < bestD + anchorPad) { bestD = da; best = t; }
   }
   return best;
 }
 
 let dragging = false, dragStart = null;
 
+/* Zeiger als Touch erkannt? (Pointer-Events liefern pointerType) */
+function isTouchPointer(e) {
+  return e.pointerType === "touch" || e.pointerType === "pen";
+}
+
 canvas.addEventListener("mousedown", (e) => {
+  // Touch steuert ausschließlich über die INPUT-TOUCH-Handler (unten),
+  // damit Maus- und Touch-Logik sich nicht doppelt auslösen
+  if (isTouchPointer(e)) return;
   if (G.over) return;
   if (G.paused) return; // Pause: keine Auswahl/Befehle/Marker (konsistent zum Overlay)
   if (e.button === 1) {                    // Mittelklick: Kamera-Ziehen
@@ -584,6 +641,9 @@ canvas.addEventListener("mousedown", (e) => {
 });
 
 window.addEventListener("mousemove", (e) => {
+  // Touch-Pointer erzeugt kein sinnvolles Hover-Bild; dessen moves
+  // gehören allein zur INPUT-TOUCH-Pan/Pinch-Logik
+  if (isTouchPointer(e)) return;
   if (dragging && dragStart) {
     G.cam.x = dragStart.cx - (e.clientX - dragStart.mx) / G.cam.zoom;
     G.cam.y = dragStart.cy - (e.clientY - dragStart.my) / G.cam.zoom;
@@ -602,7 +662,7 @@ canvas.addEventListener("mouseleave", () => { G.hover = null; });
 canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 
 /* Rechtsklick: Bewegungsbefehl — oder Angriffsbefehl auf Feindtruppe. */
-function issueOrder(sx, sy) {
+function issueOrder(sx, sy, touch) {
   const t = selectedTroop();
   if (!t) return;
   const w = screenToWorld(sx, sy);
@@ -613,7 +673,7 @@ function issueOrder(sx, sy) {
     G.markers.push({ kind: "move", x: t.dest.x, y: t.dest.y, life: 1.2, life0: 1.2 });
     return;
   }
-  const foe = troopAt(w.x, w.y, 1 - t.team);
+  const foe = troopAt(w.x, w.y, 1 - t.team, touch);
   if (foe) {
     t.targetTroop = foe;     // Angriffsbefehl
     t.dest = { x: foe.x, y: foe.y };
@@ -647,6 +707,113 @@ window.addEventListener("keydown", (e) => {
     const i = parseInt(k, 10) - 1;
     if (G.playerTroops[i] && G.playerTroops[i].alive) G.selected = i;
   }
+});
+
+/* ======================================================================
+ *  INPUT-TOUCH — Touch-Steuerung über Pointer-Events (SPEC-mobile)
+ *  Maus-Logik oben bleibt unangetastet: Touch-Pointer (pointerType
+ *  touch/pen) werden von den Maus-Handlern ignoriert und ausschließ-
+ *  lich hier verarbeitet. Ein Finger = Tap oder Pan (12-px-Schwelle),
+ *  zwei Finger = Pinch-Zoom um den Finger-Mittelpunkt.
+ * ====================================================================== */
+
+const TAP_SLOP = 12;          // Bewegungsschwelle: darunter = Tap, darüber = Pan
+const ZOOM_MIN = 0.35, ZOOM_MAX = 2.2;  // wie Mausrad
+
+const touchPtrs = new Map();  // pointerId -> { x, y }
+let tapState = null;          // laufender Einzel-Finger { id, sx, sy, lx, ly, moved }
+let pinchState = null;        // Pinch-Anker { d0, wx, wy }
+
+canvas.addEventListener("pointerdown", (e) => {
+  if (!isTouchPointer(e)) return;         // Maus: bestehende Handler
+  if (G.over || G.paused) return;
+  canvas.setPointerCapture(e.pointerId);
+  touchPtrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+  if (touchPtrs.size === 1) {
+    // erster Finger: potenzieller Tap (wird erst beim Loslassen ausgewertet)
+    tapState = { id: e.pointerId, sx: e.clientX, sy: e.clientY,
+                 lx: e.clientX, ly: e.clientY, moved: false };
+  } else if (touchPtrs.size === 2) {
+    // zweiter Finger: Tap verwerfen, Pinch starten (Mittelpunkt-Anker)
+    tapState = null;
+    const [a, b] = [...touchPtrs.values()];
+    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    const w = screenToWorld(mx, my);
+    pinchState = { d0: Math.hypot(a.x - b.x, a.y - b.y) || 1, wx: w.x, wy: w.y };
+  }
+  e.preventDefault(); // Long-Press-Menü & Kompatibilitäts-Maus-Events unterdrücken
+});
+
+canvas.addEventListener("pointermove", (e) => {
+  if (!isTouchPointer(e) || !touchPtrs.has(e.pointerId)) return;
+  const p = touchPtrs.get(e.pointerId);
+  p.x = e.clientX; p.y = e.clientY;
+
+  if (touchPtrs.size >= 2 && pinchState) {
+    // Pinch: Zoom um den Finger-Mittelpunkt (Klemmen an Zoom-Grenzen)
+    const [a, b] = [...touchPtrs.values()];
+    const dist = Math.hypot(a.x - b.x, a.y - b.y) || 1;
+    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    G.cam.zoom = clamp(G.cam.zoom * (dist / pinchState.d0), ZOOM_MIN, ZOOM_MAX);
+    // Weltpunkt unter dem Mittelpunkt festhalten (Zoom + zugleich Pan)
+    const w = screenToWorld(mx, my);
+    G.cam.x += pinchState.wx - w.x;
+    G.cam.y += pinchState.wy - w.y;
+    pinchState.d0 = dist;                 // relativ weiterzoomen
+    pinchState.wx = w.x; pinchState.wy = w.y;
+    clampCam();
+    return;
+  }
+
+  if (tapState && e.pointerId === tapState.id) {
+    const dx = e.clientX - tapState.sx, dy = e.clientY - tapState.sy;
+    if (!tapState.moved && Math.hypot(dx, dy) > TAP_SLOP) tapState.moved = true;
+    if (tapState.moved) {                 // ab Schwelle: Kamera-Pan (ein Finger)
+      G.cam.x -= (e.clientX - tapState.lx) / G.cam.zoom;
+      G.cam.y -= (e.clientY - tapState.ly) / G.cam.zoom;
+      clampCam();
+    }
+    tapState.lx = e.clientX; tapState.ly = e.clientY;
+  }
+});
+
+function touchPointerEnd(e) {
+  if (!isTouchPointer(e) || !touchPtrs.has(e.pointerId)) return;
+  touchPtrs.delete(e.pointerId);
+
+  if (touchPtrs.size < 2) pinchState = null;
+
+  if (tapState && e.pointerId === tapState.id) {
+    if (!tapState.moved) handleTouchTap(tapState.sx, tapState.sy);
+    tapState = null;
+  } else if (touchPtrs.size === 1) {
+    // nach Pinch-Abbruch: verbleibender Finger wird sofort Pan-Anker
+    const [id, p] = [...touchPtrs.entries()][0];
+    tapState = { id, sx: p.x, sy: p.y, lx: p.x, ly: p.y, moved: true };
+  }
+}
+canvas.addEventListener("pointerup", touchPointerEnd);
+canvas.addEventListener("pointercancel", touchPointerEnd);
+
+/* Tap-Auswertung (SPEC-mobile):
+   - Tap auf EIGENE Truppe  -> auswählen
+   - Tap auf FEIND (mit eigener Auswahl) -> Angriffsbefehl
+   - Tap auf freien Boden (mit eigener Auswahl) -> Marschbefehl
+   - Tap ohne Auswahl auf Feind/Boden -> nichts (kein Fehlbefehl) */
+function handleTouchTap(sx, sy) {
+  if (G.over || G.paused) return;
+  const w = screenToWorld(sx, sy);
+  const own = troopAt(w.x, w.y, 0, true);
+  if (own) { G.selected = G.playerTroops.indexOf(own); return; }
+  if (G.selected === null) return;        // kein versehentlicher Befehl
+  issueOrder(sx, sy, true);
+}
+
+/* contextmenu auch für Long-Press-Touch unterdrücken (Maus-Rechtsklick
+   auf dem Canvas ist bereits oben blockiert). */
+document.addEventListener("contextmenu", (e) => {
+  if (touchPtrs.size > 0) e.preventDefault();
 });
 
 function selectedTroop() {
@@ -1194,6 +1361,11 @@ function buildSidebar() {
     div.addEventListener("mousedown", (e) => {
       // nur lebende Truppen auswählbar
       if (e.button === 0 && G.playerTroops[i].alive) { G.selected = i; e.stopPropagation(); }
+    });
+    // Touch: Karten tapptbar (Pointer-Events; Maus läuft über mousedown)
+    div.addEventListener("pointerdown", (e) => {
+      if (e.pointerType !== "touch" && e.pointerType !== "pen") return;
+      if (G.playerTroops[i].alive) { G.selected = i; e.stopPropagation(); }
     });
     sidebar.appendChild(div);
     cardEls.push(div);

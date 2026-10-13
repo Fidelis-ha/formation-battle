@@ -1,0 +1,112 @@
+OpenCode via RouterLab
+Model: glm-5.3-flash
+Endpoint: http://127.0.0.1:44439 -> https://api.routerlab.ch/v1
+
+[0m
+> build · glm-5.3-flash
+[0m
+[0m→ [0mRead docs/SPEC-mobile.md
+[0m
+[0m$ [0mls .reviews 2>/dev/null; wc -l index.html
+design-rereview-kimi.md
+design-review-kimi.log
+design-review-kimi.md
+fix-run-1.log
+func-rereview.md
+func-ux-code-review.log
+func-ux-code-review.md
+mobile-rereview.log
+mobile-run-1.log
+security-rereview-glm.md
+security-review-glm.log
+security-review-glm.md
+shot-descriptions.md
+shots
+1504 index.html
+[0m
+[0m✱ [0mGrep "pointer|touch|pointerdown|mousedown|contextmenu|devicePixelRatio|orientationchange|coarse|touchHint|TAP_SLOP|pinch"[90m in index.html · 100 matches[0m
+[0m→ [0mRead index.html[90m [limit=130, offset=560][0m
+[0m→ [0mRead index.html[90m [limit=140, offset=690][0m
+[0m→ [0mRead index.html[90m [limit=60, offset=1340][0m
+[0m→ [0mRead index.html[90m [limit=40, offset=95][0m
+[0m→ [0mRead index.html[90m [limit=35, offset=1][0m
+[0m
+[0m$ [0mrg -n "viewport|touchHint|mouseHint|canvas" index.html | rg -v "game-canvas" | head -20; git -C /opt/data/projekte/formation-battle diff HEAD -- index.html | head -5; git -C /opt/data/projekte/formation-battle log --oneline -3
+33:<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+100:  #touchHint { display: none; }
+117:    #hint .mouseHint { display: none; }
+118:    #hint .touchHint { display: inline; }
+153:<canvas id="game"></canvas>
+164:  <span class="mouseHint">
+169:  <span class="touchHint">
+568:const canvas = document.getElementById("game");
+569:const ctx = canvas.getContext("2d");
+576:  canvas.width = Math.round(vw * dpr);
+577:  canvas.height = Math.round(vh * dpr);
+624:canvas.addEventListener("mousedown", (e) => {
+661:canvas.addEventListener("mouseleave", () => { G.hover = null; });
+662:canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+688:canvas.addEventListener("wheel", (e) => {
+727:canvas.addEventListener("pointerdown", (e) => {
+730:  canvas.setPointerCapture(e.pointerId);
+748:canvas.addEventListener("pointermove", (e) => {
+796:canvas.addEventListener("pointerup", touchPointerEnd);
+797:canvas.addEventListener("pointercancel", touchPointerEnd);
+diff --git a/index.html b/index.html
+index 10f814c..b672194 100644
+--- a/index.html
++++ b/index.html
+@@ -22,21 +22,27 @@
+b8fdebb Review-Fixes: Sichtbarkeit (Banner/Projektile/Einschlag), Pause-Guards, CSP, Mini-HP-Balken, Leichen-Silhouetten
+ca55f32 Formation Battle: eigene Web-Implementierung (SPEC + Reviews + Fixes)
+[0m
+[0m$ [0mrg -n "touch-action|user-select|touch-callout" index.html
+40:  body { font-family: "Segoe UI", Arial, sans-serif; user-select: none;
+41:         -webkit-user-select: none; -webkit-touch-callout: none; }
+45:          touch-action: none; }
+[0m
+[0m→ [0mRead index.html[90m [limit=35, offset=36][0m
+[0m→ [0mRead index.html[90m [limit=30, offset=150][0m
+[0m
+[0m$ [0mgit diff HEAD -- index.html | rg -n "^[+-].*(mousedown|mousemove|mouseup|wheel|keydown|mouseleave|contextmenu|troopAt|screenToWorld|clampCam)" | head -30
+114:-function troopAt(wx, wy, team) {
+119:+function troopAt(wx, wy, team, touch) {
+173:-  const foe = troopAt(w.x, w.y, 1 - t.team);
+174:+  const foe = troopAt(w.x, w.y, 1 - t.team, touch);
+212:+    const w = screenToWorld(mx, my);
+230:+    const w = screenToWorld(mx, my);
+235:+    clampCam();
+245:+      clampCam();
+276:+  const w = screenToWorld(sx, sy);
+277:+  const own = troopAt(w.x, w.y, 0, true);
+283:+/* contextmenu auch für Long-Press-Touch unterdrücken (Maus-Rechtsklick
+285:+document.addEventListener("contextmenu", (e) => {
+296:+    // Touch: Karten tapptbar (Pointer-Events; Maus läuft über mousedown)
+[0m
+[0m$ [0mgit diff HEAD -- index.html | rg -n "^[+-]" | rg "mouse|dragging|dragStart|hover" 
+61:+    #hint .mouseHint { display: none; }
+81:+  <span class="mouseHint">
+296:+    // Touch: Karten tapptbar (Pointer-Events; Maus läuft über mousedown)
+[0m
+[0m$ [0mgit diff HEAD -- index.html | rg -c "^[+-].*mousedown"; git diff HEAD -- index.html | rg "^[+-].*(mousedown|mousemove|mouseup|mouseleave)"
+1
++    // Touch: Karten tapptbar (Pointer-Events; Maus läuft über mousedown)
+[0m
+[0m← [0mWrite .reviews/mobile-rereview.md
+Wrote file successfully.
+[0m
+Re-Review abgeschlossen → `.reviews/mobile-rereview.md`.
+
+**Ergebnis: alle 9 Punkte VERIFIZIERT**, keine Blocker.
+
+- **(1)** TAP_SLOP 12 (Z. 720), Tap erst bei pointerup (787), Pinch um Mittelpunkt mit Klemmen 0.35–2.2 (758), Pan-Anker nach Pinch-Abbruch (790)
+- **(2)** Tap-Semantik vollständig inkl. „ohne Auswahl → nichts" (804–811) + Touch-Toleranz 46/26 (599–601)
+- **(3)** Symmetrische Guards: mousedown/mousemove ignorieren touch (627, 646), pointerdown ignoriert mouse (728) + `preventDefault` gegen Kompatibilitäts-Events (745)
+- **(4)** Long-Press-Block via `touchPtrs.size > 0` am document (815–817) + `touch-callout: none` (41)
+- **(5)** Karten: mousedown nur Maus, pointerdown nur touch/pen — Aktion idempotent, kein Doppel-Effekt (1361–1369)
+- **(6)** Diff gegen HEAD: Maus-Handler nur Guard + optionaler `touch`-Param ergänzt, Rest unverändert
+- **(7)** Viewport-Meta exakt nach SPEC (33), Media Query 820px/coarse (102), Karten 48px (110)
+- **(8)** DPR-Cap 2 (574), resize + orientationchange (579–580)
+- **(9)** Hover auf touch geblockt (646)
+
+Neue Befunde: **N1 trivial** (fehlender `blur`-Reset von touchPtrs → contextmenu-Block könnte nach Tab-Wechsel hängen), **N2 trivial** (>2 Finger deterministisch auf 1+2), **N3 niedrig** (Card/Canvas-Trennung sauber).
